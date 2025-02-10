@@ -3,6 +3,7 @@ from jax.lax import cond, map, scan
 import jax.numpy as jnp
 from typing import Callable, List
 from jax import config
+import numpy as np
 config.update("jax_enable_x64", True)
 import numpyro
 import numpyro.distributions as dist
@@ -99,9 +100,11 @@ class interpolation_model:
         mcmc.print_summary(exclude_deterministic=False)
         return mcmc.get_samples(), extras
     
-    def run_optimiser(self,x0,steps=100,start_learning_rate=1e-2, n_restarts = 4,jump_sdev = 0.1):
-         
-        def loss(omgw):
+    def run_optimiser(self,loss,x0,steps=100,start_learning_rate=1e-2, n_restarts = 4,jump_sdev = 0.1):
+    # still working on it..., create separate loss function for each interpolation class
+        def loss(params):
+            pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=params,x_pred=k) #
+            omgw = self.omega_func(pz_func = pz_interp,)
             domgw = omgw - self.omgw_means
             return jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw)
 
@@ -124,7 +127,7 @@ class interpolation_model:
             loss_val, gradval = value_and_grad(loss)(params)
             updates, opt_state = optimizer.update(gradval, opt_state)
             params = optax.apply_updates(params, updates)
-            params = optax.projections.projection_hypercube(params)
+            params = optax.projections.projection_hypercube(params) # replace with jnp.clip or apply unit transform to params
             carry = params, opt_state
             return carry, loss_val
     
