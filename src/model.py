@@ -60,7 +60,7 @@ class interpolation_model:
                  omgw_karr: jnp.array,
                  omgw_means: jnp.array,
                  omgw_cov: jnp.array, 
-                 omgw_method: str,
+                 omgw_method: str = 'fast',
                  ):
         
         self.nbins = nbins
@@ -100,18 +100,13 @@ class interpolation_model:
         mcmc.print_summary(exclude_deterministic=False)
         return mcmc.get_samples(), extras
     
-    def run_optimiser(self,loss,x0,steps=100,start_learning_rate=1e-2, n_restarts = 4,jump_sdev = 0.1):
-    # still working on it..., create separate loss function for each interpolation class
-        def loss(params):
-            pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=params,x_pred=k) #
-            omgw = self.omega_func(pz_func = pz_interp,)
-            domgw = omgw - self.omgw_means
-            return jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw)
+    def run_optimiser(self,loss,x0,y_low,y_high,steps=100,start_learning_rate=1e-1, n_restarts = 4,jump_sdev = 0.1):
 
         optimizer = optax.adam(start_learning_rate)
         params = jnp.array(x0)
         ndim = len(x0)
         opt_state = optimizer.init(params)
+        steps = ndim * steps
         # start = time.time()
     
         # model_info = numpyro.infer.util.initialize_model(
@@ -127,7 +122,7 @@ class interpolation_model:
             loss_val, gradval = value_and_grad(loss)(params)
             updates, opt_state = optimizer.update(gradval, opt_state)
             params = optax.apply_updates(params, updates)
-            params = optax.projections.projection_hypercube(params) # replace with jnp.clip or apply unit transform to params
+            params = jnp.clip(params,y_low,y_high) #optax.projections.projection_hypercube(params) # replace with jnp.clip or apply unit transform to params
             carry = params, opt_state
             return carry, loss_val
     
@@ -159,17 +154,39 @@ class fixed_node_model(interpolation_model):
                  omgw_means: jnp.array,
                  omgw_cov: jnp.array, 
                  omgw_method: str,
+                 y_low = - 8.,
+                 y_high = 1.,
                  ):            
         super().__init__(nbins,pz_kmin,pz_kmax,omgw_karr,omgw_means,omgw_cov,omgw_method)
         self.log_k_nodes = jnp.linspace(self.k_min,self.k_max,self.nbins) # fixed nodes of the interpolation
         self.k = jnp.exp(self.log_k_nodes)
+        self.y_low = y_low
+        self.y_high = y_high
 
     def model(self,omgw_model_args=None,omgw_model_kwargs=None):
-        train_y = numpyro.sample('y',dist.Uniform(low=-8*jnp.ones(self.nbins),high=jnp.ones(self.nbins))) 
-        pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=train_y,x_pred=k) #
-        omgw = self.omgw_func(pz_func = pz_interp) #,self.bounds,self.omgw_karr,*omgw_model_args,**omgw_model_kwargs)             numpyro.sample('omk',dist.MultivariateNormal(loc=self.omgw_means,covariance_matrix=self.omgw_cov),obs=omgw)
+        train_y = numpyro.sample('y',dist.Uniform(low=self.y_low*jnp.ones(self.nbins),high=self.y_high*jnp.ones(self.nbins))) 
+        # pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=train_y,x_pred=k) #
+        # omgw = self.omgw_func(pz_func = pz_interp) #,self.bounds,self.omgw_karr,*omgw_model_args,**omgw_model_kwargs)             numpyro.sample('omk',dist.MultivariateNormal(loc=self.omgw_means,covariance_matrix=self.omgw_cov),obs=omgw)
+        omgw = self.get_omgw_from_y(train_y)
         # numpyro.sample('omk',dist.Normal(omks_mean,omks_sigma),obs=omks_gp) # this assumes omks are independent, if off-diagonal cov use below
         numpyro.sample('omk',dist.MultivariateNormal(loc=self.omgw_means,covariance_matrix=self.omgw_cov),obs=omgw)
+
+    def get_pz_from_y(self,y, k ):
+        pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=y,x_pred=k) #
+        return pz_interp(k)
+
+    def get_omgw_from_y(self,y):
+        pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=y,x_pred=k) #
+        omgw = self.omgw_func(pz_func = pz_interp,)
+        return omgw
+
+    def loss(self,y):
+        omgw = self.get_omgw_from_y(y)
+        domgw = omgw - self.omgw_means
+        return jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw)
+    
+    def run_optimiser(self, x0, steps=100, start_learning_rate=1e-1, n_restarts=4, jump_sdev=0.1):
+        return super().run_optimiser(self.loss, x0, self.y_low, self.y_high, steps, start_learning_rate, n_restarts, jump_sdev)
 
 
 class variable_node_model(interpolation_model):
@@ -178,9 +195,9 @@ class variable_node_model(interpolation_model):
                  nbins:int,
                  pz_kmin: float,
                  pz_kmax: float,
-                 omgw_karr: jnp.array,
-                 omgw_means: jnp.array,
-                 omgw_cov: jnp.array, 
+                 omgw_karr: jnp.ndarray,
+                 omgw_means: jnp.ndarray,
+                 omgw_cov: jnp.ndarray, 
                  omgw_method: str,
                  ):
         super().__init__(nbins,pz_kmin,pz_kmax,omgw_karr,omgw_means,omgw_cov,omgw_method)
