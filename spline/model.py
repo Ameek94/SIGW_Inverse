@@ -14,8 +14,8 @@ enable_x64()
 num_devices = device_count()
 import optax
 from interpax import CubicSpline
-from src.omega_gw_grid import OmegaGWGrid
-from src.omega_gw_jax import OmegaGWjax
+from spline.omega_gw_grid import OmegaGWGrid
+from spline.omega_gw_jax import OmegaGWjax
 from scipy.optimize import basinhopping
 
 ### start by defining some useful functions
@@ -50,18 +50,16 @@ def spline_predict(x_train,y_train,x_pred):
     x_pred = jnp.log(x_pred)
     return jnp.exp(spline_predict_log(x_train,y_train,x_pred))
 
-def optim_scipy_bh(loss,x0,ndim,minimizer_kwargs={'method': 'L-BFGS-B'  },stepsize=1/4,niter=15):
+def optim_scipy_bh(loss,x0,minimizer_kwargs={'method': 'L-BFGS-B'  },stepsize=1/4,niter=15,bounds=None):
 
     @jit
     def func_scipy(x):
         val, grad = value_and_grad(loss)(x)
         return val, grad
-    
-    # acq_grad = grad(acq_func)
-    # ideally stepsize should be ~ max(delta,distance between sampled points)
-    # with delta some small number to ensure that step size does not become too small
-    minimizer_kwargs['jac'] = True #acq_grad
-    minimizer_kwargs['bounds'] = ndim*[(0,1)]
+
+    ndim = len(x0)    
+    minimizer_kwargs['jac'] = True 
+    minimizer_kwargs['bounds'] = ndim*[(0,1)] if bounds is None else ndim*[bounds]
     results = basinhopping(func_scipy,
                                         x0=x0,
                                         stepsize=stepsize,
@@ -69,6 +67,50 @@ def optim_scipy_bh(loss,x0,ndim,minimizer_kwargs={'method': 'L-BFGS-B'  },stepsi
                                         minimizer_kwargs=minimizer_kwargs) 
     # minimizer_kwargs is for the choice of the local optimizer, bounds and to provide gradient if necessary
     return results.x, results.fun
+
+def optim_optax(loss,x0,y_low,y_high,steps=100,start_learning_rate=1e-1, n_restarts = 4,jump_sdev = 0.1):
+
+    optimizer = optax.adam(start_learning_rate)
+    params = jnp.array(x0)
+    ndim = len(x0)
+    opt_state = optimizer.init(params)
+    steps = ndim * steps
+    # start = time.time()
+    
+        # model_info = numpyro.infer.util.initialize_model(
+        #     rng_key,
+        #     self.model,
+        #     dynamic_args=True,)
+            # model_args=[years],
+            # model_kwargs={"tavg": era5_arr, "climsims": cmip6_arr}
+
+    @jit
+    def step(carry,xs):
+        params, opt_state = carry
+        loss_val, gradval = value_and_grad(loss)(params)
+        updates, opt_state = optimizer.update(gradval, opt_state)
+        params = optax.apply_updates(params, updates)
+        params = jnp.clip(params,y_low,y_high) #optax.projections.projection_hypercube(params) # replace with jnp.clip or apply unit transform to params
+        carry = params, opt_state
+        return carry, loss_val
+    
+    def findoptim(x0):
+        params = x0
+        opt_state = optimizer.init(params)
+        (params, _ ), loss_vals = scan(step,(params,opt_state),length=steps)
+        return (params,loss_vals[-1])
+    
+    if device_count()>1:
+        xi = x0 + jump_sdev*np.random.randn(device_count(),ndim)
+        res = pmap(findoptim,devices=devices())(xi)
+    else:
+        xi = x0 + jump_sdev*np.random.randn(n_restarts,ndim)
+        res =  map(findoptim,xi) # vmap?
+
+    best_val, idx = np.min(res[1]), np.argmin(res[1])
+    best_params = res[0][idx]
+
+    return best_params, best_val
 
 class interpolation_model:
     """
@@ -79,9 +121,9 @@ class interpolation_model:
                  nbins:int,
                  pz_kmin: float,
                  pz_kmax: float,
-                 omgw_karr: jnp.array,
-                 omgw_means: jnp.array,
-                 omgw_cov: jnp.array, 
+                 omgw_karr: jnp.ndarray,
+                 omgw_means: jnp.ndarray,
+                 omgw_cov: jnp.ndarray, 
                  omgw_method: str = 'grid',
                  omgw_method_kwargs: dict = {'s': jnp.linspace(0, 1, 500),   't': jnp.logspace(-6, 6, 500) },
                  ):
@@ -109,7 +151,7 @@ class interpolation_model:
                           num_chains=1,
                           progress_bar=True,
                           thinning=1,
-                          jit_model_args=True,
+                          jit_model_args=False,
                           seed=42):
         kernel = NUTS(self.model,dense_mass=False,
                 max_tree_depth=6)
@@ -125,49 +167,7 @@ class interpolation_model:
         mcmc.print_summary(exclude_deterministic=False)
         return mcmc.get_samples(), extras
     
-    def run_optimiser(self,loss,x0,y_low,y_high,steps=100,start_learning_rate=1e-1, n_restarts = 4,jump_sdev = 0.1):
 
-        optimizer = optax.adam(start_learning_rate)
-        params = jnp.array(x0)
-        ndim = len(x0)
-        opt_state = optimizer.init(params)
-        steps = ndim * steps
-        # start = time.time()
-    
-        # model_info = numpyro.infer.util.initialize_model(
-        #     rng_key,
-        #     self.model,
-        #     dynamic_args=True,)
-            # model_args=[years],
-            # model_kwargs={"tavg": era5_arr, "climsims": cmip6_arr}
-
-        @jit
-        def step(carry,xs):
-            params, opt_state = carry
-            loss_val, gradval = value_and_grad(loss)(params)
-            updates, opt_state = optimizer.update(gradval, opt_state)
-            params = optax.apply_updates(params, updates)
-            params = jnp.clip(params,y_low,y_high) #optax.projections.projection_hypercube(params) # replace with jnp.clip or apply unit transform to params
-            carry = params, opt_state
-            return carry, loss_val
-    
-        def findoptim(x0):
-            params = x0
-            opt_state = optimizer.init(params)
-            (params, _ ), loss_vals = scan(step,(params,opt_state),length=steps)
-            return (params,loss_vals[-1])
-    
-        if device_count()>1:
-            xi = x0 + jump_sdev*np.random.randn(device_count(),ndim)
-            res = pmap(findoptim,devices=devices())(xi)
-        else:
-            xi = x0 + jump_sdev*np.random.randn(n_restarts,ndim)
-            res =  map(findoptim,xi) # vmap?
-
-        best_val, idx = np.min(res[1]), np.argmin(res[1])
-        best_params = res[0][idx]
-
-        return best_params, best_val
 
 class fixed_node_model(interpolation_model):
         
@@ -212,8 +212,8 @@ class fixed_node_model(interpolation_model):
         domgw = omgw - self.omgw_means
         return jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw)
     
-    def run_optimiser(self, x0, steps=100, start_learning_rate=1e-1, n_restarts=4, jump_sdev=0.1):
-        return super().run_optimiser(self.loss, x0, self.y_low, self.y_high, steps, start_learning_rate, n_restarts, jump_sdev)
+    # def run_optimiser(self, x0, steps=100, start_learning_rate=1e-1, n_restarts=4, jump_sdev=0.1):
+        # return super().run_optimiser(self.loss, x0, self.y_low, self.y_high, steps, start_learning_rate, n_restarts, jump_sdev)
 
 
 class variable_ends_model(interpolation_model):
