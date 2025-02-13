@@ -16,6 +16,7 @@ import optax
 from interpax import CubicSpline
 from src.omega_gw_grid import OmegaGWGrid
 from src.omega_gw_jax import OmegaGWjax
+from scipy.optimize import basinhopping
 
 ### start by defining some useful functions
 def unit_transform(x,bounds):
@@ -41,12 +42,33 @@ def spline_predict_log(x_train,y_train,x_pred):
     y_pred = spl(x_pred)
     return y_pred
 
+@jit
 def spline_predict(x_train,y_train,x_pred):
     """
     Obtain spline prediction after exponentiating log P spline. 
     """
     x_pred = jnp.log(x_pred)
     return jnp.exp(spline_predict_log(x_train,y_train,x_pred))
+
+def optim_scipy_bh(loss,x0,ndim,minimizer_kwargs={'method': 'L-BFGS-B'  },stepsize=1/4,niter=15):
+
+    @jit
+    def func_scipy(x):
+        val, grad = value_and_grad(loss)(x)
+        return val, grad
+    
+    # acq_grad = grad(acq_func)
+    # ideally stepsize should be ~ max(delta,distance between sampled points)
+    # with delta some small number to ensure that step size does not become too small
+    minimizer_kwargs['jac'] = True #acq_grad
+    minimizer_kwargs['bounds'] = ndim*[(0,1)]
+    results = basinhopping(func_scipy,
+                                        x0=x0,
+                                        stepsize=stepsize,
+                                        niter=niter,
+                                        minimizer_kwargs=minimizer_kwargs) 
+    # minimizer_kwargs is for the choice of the local optimizer, bounds and to provide gradient if necessary
+    return results.x, results.fun
 
 class interpolation_model:
     """
@@ -60,7 +82,8 @@ class interpolation_model:
                  omgw_karr: jnp.array,
                  omgw_means: jnp.array,
                  omgw_cov: jnp.array, 
-                 omgw_method: str = 'fast',
+                 omgw_method: str = 'grid',
+                 omgw_method_kwargs: dict = {'s': jnp.linspace(0, 1, 500),   't': jnp.logspace(-6, 6, 500) },
                  ):
         
         self.nbins = nbins
@@ -70,10 +93,12 @@ class interpolation_model:
         self.omgw_invcov = jnp.linalg.inv(omgw_cov)
         self.k_min, self.k_max = jnp.log(pz_kmin), jnp.log(pz_kmax)
         self.bounds = jnp.array([pz_kmin,pz_kmax])
-        if omgw_method=='fast':
+        if omgw_method=='grid':
             self.omgw_func = OmegaGWGrid(omgw_karr=self.omgw_karr,)
+        elif omgw_method=='jax':
+            self.omgw_func = OmegaGWjax(f=self.omgw_karr,**omgw_method_kwargs)
         else:
-            self.omgw_func = OmegaGWjax()
+            return ValueError("Not a valid method")
 
     def model(self):
         pass
@@ -154,14 +179,16 @@ class fixed_node_model(interpolation_model):
                  omgw_means: jnp.array,
                  omgw_cov: jnp.array, 
                  omgw_method: str,
+                 omgw_method_kwargs: dict = None,
                  y_low = - 8.,
                  y_high = 1.,
                  ):            
-        super().__init__(nbins,pz_kmin,pz_kmax,omgw_karr,omgw_means,omgw_cov,omgw_method)
+        super().__init__(nbins,pz_kmin,pz_kmax,omgw_karr,omgw_means,omgw_cov,omgw_method,omgw_method_kwargs=omgw_method_kwargs)
         self.log_k_nodes = jnp.linspace(self.k_min,self.k_max,self.nbins) # fixed nodes of the interpolation
         self.k = jnp.exp(self.log_k_nodes)
         self.y_low = y_low
         self.y_high = y_high
+        # print(self.omgw_karr.shape)
 
     def model(self,omgw_model_args=None,omgw_model_kwargs=None):
         train_y = numpyro.sample('y',dist.Uniform(low=self.y_low*jnp.ones(self.nbins),high=self.y_high*jnp.ones(self.nbins))) 
@@ -171,13 +198,13 @@ class fixed_node_model(interpolation_model):
         # numpyro.sample('omk',dist.Normal(omks_mean,omks_sigma),obs=omks_gp) # this assumes omks are independent, if off-diagonal cov use below
         numpyro.sample('omk',dist.MultivariateNormal(loc=self.omgw_means,covariance_matrix=self.omgw_cov),obs=omgw)
 
-    def get_pz_from_y(self,y, k ):
-        pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=y,x_pred=k) #
+    def get_pz_from_y(self,y, k):
+        pz_interp = lambda x: spline_predict(x_train=self.log_k_nodes,y_train=y,x_pred=x) #
         return pz_interp(k)
 
     def get_omgw_from_y(self,y):
         pz_interp = lambda k: spline_predict(x_train=self.log_k_nodes,y_train=y,x_pred=k) #
-        omgw = self.omgw_func(pz_func = pz_interp,)
+        omgw = self.omgw_func(pz_interp,self.omgw_karr)
         return omgw
 
     def loss(self,y):
@@ -189,7 +216,7 @@ class fixed_node_model(interpolation_model):
         return super().run_optimiser(self.loss, x0, self.y_low, self.y_high, steps, start_learning_rate, n_restarts, jump_sdev)
 
 
-class variable_node_model(interpolation_model):
+class variable_ends_model(interpolation_model):
 
     def __init__(self,
                  nbins:int,

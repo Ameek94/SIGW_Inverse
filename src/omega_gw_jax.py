@@ -639,13 +639,13 @@ class OmegaGWjax:
             handled by scipy. Thus the grid in s and t will be ignored and
             only the end points will be used.
     """
-    def __init__(self, P_zeta, s, t, f=None, norm="RD", kernel="RD", upsample=False, dP_zeta="auto", to_numpy=False, jit=True,
+    def __init__(self, s, t, f=None, norm="RD", kernel="RD", upsample=False, dP_zeta="auto", to_numpy=False, jit=True,
                  dP_zeta_has_delta=False):
         # Constants
         OMEGA_R = 4.2 * 10**(-5) # times h^2, otherwise ~ 8* 10**(-5)
         CG = 0.39
 
-        self.P_zeta = P_zeta
+        # self.P_zeta = P_zeta
         if dP_zeta == "auto":
             self.dP_zeta = dP_zeta_auto
         elif callable(dP_zeta):
@@ -761,7 +761,7 @@ class OmegaGWjax:
         else:
             return np.array(res)
 
-    def __call__(self, fvec, *params):
+    def __call__(self, P_zeta, fvec, *params):
         """
         Compute the :math:`Omega_{GW}` values.
 
@@ -777,15 +777,21 @@ class OmegaGWjax:
         """
         
         # setting k for evaluation
-        kvec_full_resolution = jnp.copy(jnp.array(fvec)) * 2 * jnp.pi
-        if self.upsample:
-            if callable(self.f):
-                fvec = self.f(*params)
-            else:
-                fvec = self.f
-            kvec = jnp.array(fvec) * 2 * jnp.pi
-        else:
-            kvec = kvec_full_resolution
+        # kvec_full_resolution = jnp.copy(jnp.array(fvec)) * 2 * jnp.pi
+        # if self.upsample:
+        #     if callable(self.f):
+        #         fvec = self.f(*params)
+        #     else:
+        #         fvec = self.f
+        #     kvec = jnp.array(fvec) * 2 * jnp.pi
+        # else:
+        #     kvec = kvec_full_resolution
+
+        kvec = 2 * jnp.pi * fvec
+        kvec_full_resolution = kvec
+
+        # print(kvec.shape)
+        
         # Setting s
         if self.fixed_s:
             s = self.s
@@ -797,11 +803,11 @@ class OmegaGWjax:
         else:
             t = self.t(kvec, *params)
 
-        res = self.integration_routine(self.P_zeta, s, t, kvec, *params)
+        res = self.integration_routine(P_zeta, s, t, kvec, *params)
 
-        out = 2 * self.norm(kvec_full_resolution) * self.upsample_k(kvec_full_resolution, kvec, res)
+        # out = 2 * self.norm(kvec_full_resolution) * self.upsample_k(kvec_full_resolution, kvec, res)
 
-        return out
+        return res
     
     def integrate_constant_kernel(self, P_zeta, s, t, kvec, *params):
         """

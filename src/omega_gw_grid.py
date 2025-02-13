@@ -43,7 +43,7 @@ class OmegaGWGrid:
     def get_pk_coeffs(self,pz_func):
         return pz_func(self.pz_karr)
 
-    def __call__(self,pz_func):
+    def __call__(self,pz_func,k):
         pz_amps = self.get_pk_coeffs(pz_func)
         omgw = jnp.einsum("i,j,kij->k",pz_amps,pz_amps,self.omkij)
         return omgw
