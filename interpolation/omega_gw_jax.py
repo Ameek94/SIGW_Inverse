@@ -787,7 +787,7 @@ class OmegaGWjax:
         # else:
         #     kvec = kvec_full_resolution
 
-        kvec = 2 * jnp.pi * fvec
+        kvec = fvec #2 * jnp.pi * fvec
         kvec_full_resolution = kvec
 
         # print(kvec.shape)
