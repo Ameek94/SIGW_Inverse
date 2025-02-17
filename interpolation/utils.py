@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from jax import vmap
+import matplotlib.pyplot as plt
 
 # minor modifications of https://github.com/martinjankowiak/saasbo/blob/main/util.py
 def split_vmap(func,input_arrays,batch_size=8):
@@ -15,5 +16,27 @@ def split_vmap(func,input_arrays,batch_size=8):
     results = tuple( jnp.concatenate([x[i] for x in res]) for i in range(nres))
     return results
 
-def plot_mcmc_samples(samples,):
+def plot_mcmc_spectra(samples,):
     pass
+
+
+def plot_best_spectra():
+    fig,(ax1,ax2) = plt.subplots(1,2,figsize=(12,4))
+
+    ax1.loglog(p_arr,pz_bf(p_arr),color='r')
+    ax1.loglog(p_arr,pz_amp,color='k',lw=1.5)
+    ax2.plot(k_arr,omgw_amp,color='k',lw=1.5,label='Truth')
+    ax2.loglog(k_arr,omgw_bf,color='r',label='reconstructed')
+    ax2.fill_between(k_arr,omgw_amp+1.96*omks_sigma,omgw_amp-1.96*omks_sigma,alpha=0.2,color='C0')
+    ax2.set(yscale='log',xscale='log')
+    ax1.set_ylabel(r'$P_{\zeta}(k)$')
+    ax1.set_xlabel(r'$k$')
+    ax2.set_ylim(1e-4,1.)
+
+    ax2.set_ylabel(r'$\Omega_{\mathrm{GW}}(k)$')
+    ax2.set_xlabel(r'$k$')
+    ax2.legend()
+    for val in nodes:
+        ax1.axvline(jnp.exp(val),color='k',ls='-.',alpha=0.5)
+    ax1.scatter(jnp.exp(nodes),jnp.exp(best_params),color='r')
+    fig.tight_layout()

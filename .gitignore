@@ -7,3 +7,4 @@
 *.pdf
 *.npz
 *.ipynb_checkpoints
+*.code-workspace

@@ -1,6 +1,7 @@
 from functools import partial
 from jax import vmap, pmap, jit, random, value_and_grad,devices, device_count
 from jax.lax import cond, map, scan
+from jax.scipy.linalg import cholesky, cho_solve
 import jax.numpy as jnp
 from typing import Callable, List
 from jax import config
@@ -142,13 +143,17 @@ class Interpolation_Model:
                  ):
         
         self.nbins = nbins
+
         self.omgw_karr = omgw_karr
         self.omgw_means = omgw_means
         self.omgw_cov = omgw_cov
         self.omgw_sigma = jnp.sqrt(jnp.diag(omgw_cov))
         self.omgw_invcov = jnp.linalg.inv(omgw_cov)
+        self.omgw_cho = cholesky(omgw_cov)
+        self.omgw_logdet = 2*jnp.sum(jnp.log(jnp.diag(self.omgw_cho)))
         self.omgw_len = len(omgw_means)
-        self.logfac = 0.5*self.omgw_len*jnp.log(2*math.pi) + 0.5*jnp.log(jnp.linalg.det(self.omgw_cov))
+        self.omgw_logfac = self.omgw_len*jnp.log(2*math.pi)
+
         self.logk_min, self.logk_max = log10(pz_kmin), log10(pz_kmax)
         self.bounds = jnp.array([pz_kmin,pz_kmax])
         if omgw_method=='grid':
@@ -231,14 +236,19 @@ class Fixed_Nodes_Model(Interpolation_Model):
         return omgw
 
     def loss(self,y):
+        """
+        The loss function to be minimised in the optimisation process. This is the negative log likelihood of the data given the model.
+        """
         omgw = self.get_omgw_from_y(y)
         domgw = omgw - self.omgw_means
-        return 0.5*jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw) + self.logfac
+        alpha = cho_solve((self.omgw_cho,False),domgw)
+        chi2 = jnp.dot(domgw,alpha)
+        return 0.5*(chi2 + self.omgw_logdet + self.omgw_logfac) #0.5*jnp.einsum("i,ij,j",domgw,self.omgw_invcov,domgw) + self.logfac
     
     # def run_optimiser(self, x0, steps=100, start_learning_rate=1e-1, n_restarts=4, jump_sdev=0.1):
         # return super().run_optimiser(self.loss, x0, self.y_low, self.y_high, steps, start_learning_rate, n_restarts, jump_sdev)
 
-class Variable_Nodes_Model(Fixed_Nodes_Model):
+class Moving_Nodes_Model(Fixed_Nodes_Model):
 
     def __init__(self,
                  nbins:int,
@@ -288,9 +298,7 @@ class Variable_Nodes_Model(Fixed_Nodes_Model):
     
 
 
-
-
-
+    # can cache omgw results to avoid recomputing, may be overkill
     #     def spline(self, x, y, k):
     #     def compute_spline(x, y, k):
     #         pz = spline_predict(x_train=x, y_train=y, x_pred=k)

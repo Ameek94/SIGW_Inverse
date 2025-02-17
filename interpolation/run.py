@@ -77,15 +77,10 @@ class sampler:
                             omgw_cov=self.omgw_cov,omgw_method='jax',omgw_method_kwargs=self.omgw_method_kwargs
                             ,y_low=self.y_low,y_high=self.y_high)
         samples, extras = pz_model.run_hmc_inference(num_warmup=512,num_samples=512)
-        # # print(extras.keys())
         best_idx = jnp.argmin(extras['potential_energy'])
         x0 = samples['y'][best_idx]  #
-        # x0 = -0.5*jnp.ones(nbins) #np.random.uniform(low=pz_model.lnk_min,high=pz_model.lnk_max,size=nbins)
-        print(x0)
         best_params, chi2 = optim_scipy_bh(x0 = x0,loss = pz_model.loss,bounds=(pz_model.logy_low,pz_model.logy_high)
                                            ,stepsize=0.2,niter=6*nbins) 
-        # best_params, chi2 =  optim_optax(x0 = -1.5*jnp.ones(nbins), loss = pz_model.loss, start_learning_rate=0.3 , steps = 200, jump_sdev=1.,y_low=5.,y_high=2.)
-
         aic = 2*nbins + chi2
         print(f"Number of nodes: {n}, chi2: {chi2:.4f}, aic: {aic:.4f}, 'best_params': {best_params}")
         results_dict_n = {'best_params': best_params, 'node_locations': pz_model.log_k_nodes, 'chi2': chi2, 'aic': aic}
