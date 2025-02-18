@@ -2,7 +2,7 @@ from jax import pmap, jit, random, value_and_grad, devices, device_count
 from jax.lax import map, scan
 from jax.scipy.linalg import cholesky, cho_solve
 import jax.numpy as jnp
-from typing import Callable, List
+from typing import Callable, List, Tuple
 from jax import config
 import numpy as np
 config.update("jax_enable_x64", True)
@@ -164,7 +164,9 @@ class Interpolation_Model:
                  gwb_means: jnp.ndarray,
                  gwb_cov: jnp.ndarray, 
                  gwb_method: str = 'grid',
-                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200) },
+                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200), 
+                                            "kernel": "RD", "norm": "RD"},
+                 gwb_args_bounds: List[Tuple] = None, 
                  ):
         
         self.n_nodes = n_nodes
@@ -184,6 +186,13 @@ class Interpolation_Model:
             self.gwb_func = OmegaGWGrid(gwb_karr=self.gwb_karr,)
         elif gwb_method=='jax':
             self.gwb_func = OmegaGWjax(f=self.gwb_karr,**gwb_method_kwargs)
+            if gwb_args_bounds is not None:
+                self.gwb_args_lows = gwb_args_bounds[0]
+                self.gwb_args_highs = gwb_args_bounds[1]
+                print(self.gwb_args_lows,self.gwb_args_highs)
+                self.extra_args = True
+            else:
+                self.extra_args = False
         else:
             return ValueError("Not a valid method")
 
@@ -232,7 +241,7 @@ class Interpolation_Model:
                 jit_model_args=jit_model_args)
         
         rng_key, _ = random.split(random.PRNGKey(seed), 2)
-        mcmc.run(rng_key,extra_fields=("potential_energy",)) # this can be made faster - parallel
+        mcmc.run(rng_key,self.extra_args,extra_fields=("potential_energy",)) # this can be made faster - parallel
         samples = mcmc.get_samples()
         extras = mcmc.get_extra_fields()
         mcmc.print_summary(exclude_deterministic=False)
@@ -251,7 +260,7 @@ class Fixed_Nodes_Model(Interpolation_Model):
     pz_kmax: float,
         the maximum value of k for the interpolation. P_k = 0 for k > pz_kmax
     gwb_karr: jnp.ndarray,
-        the array of k values for the GWB, assumed to be the k-values over which GWB is inferred with its mean and covariance
+        the array of k values for the GWB, assumed to be the k-values over which the GWB has been previously inferred with its mean and covariance
     gwb_means: jnp.ndarray,
         the mean of the GWB at the k-values in gwb_karr
     gwb_cov: jnp.ndarray,
@@ -274,23 +283,33 @@ class Fixed_Nodes_Model(Interpolation_Model):
                  gwb_means: jnp.ndarray,
                  gwb_cov: jnp.ndarray, 
                  gwb_method: str,
-                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200) },
+                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200), 
+                                            "kernel": "RD", "norm": "RD"},
+                 gwb_args_bounds: List[Tuple] = None, 
                  y_low: float = -5., 
                  y_high: float = 1.,
                  ):            
-        super().__init__(n_nodes,pz_kmin,pz_kmax,gwb_karr,gwb_means,gwb_cov,gwb_method,gwb_method_kwargs=gwb_method_kwargs)
+        super().__init__(n_nodes,pz_kmin,pz_kmax,gwb_karr,gwb_means,gwb_cov,gwb_method,
+                         gwb_method_kwargs=gwb_method_kwargs,gwb_args_bounds=gwb_args_bounds)
         self.log_k_nodes = jnp.linspace(self.logk_min,self.logk_max,self.n_nodes) 
         self.k_nodes = pow10(self.log_k_nodes)
         self.logy_low = y_low
         self.logy_high = y_high
 
-    def model(self):
+    def model(self,extra_args=False):
         """
         The numpyro model for the interpolation to be used in the HMC inference. 
         Currently assumes a uniform prior on the log10 P_zeta values at the nodes and a Gaussian distribution of the GWB.
         """
         train_y = self.sample_y()
-        gwb = self.get_gwb_from_xy(x=self.log_k_nodes,y = train_y)
+        if extra_args:
+            logk_max = numpyro.sample("logk_max",dist.Uniform(low=self.gwb_args_lows,high=self.gwb_args_highs))
+            kmax = numpyro.deterministic("kmax",10**logk_max)
+            etaR = numpyro.deterministic("etaR",1./kmax)
+            extra_args = jnp.array([kmax,etaR])
+            gwb = self.get_gwb_from_xy(self.log_k_nodes,train_y, extra_args)
+        else:
+            gwb = self.get_gwb_from_xy(x=self.log_k_nodes,y = train_y)
         numpyro.sample('omk',dist.Normal(loc=self.gwb_means,scale = self.gwb_sigma),obs=gwb) # this assumes omks are independent, if off-diagonal cov use below
         # numpyro.sample('omk',dist.MultivariateNormal(loc=self.gwb_means,covariance_matrix=self.gwb_cov),obs=gwb) # type: ignore
 
@@ -306,9 +325,13 @@ class Fixed_Nodes_Model(Interpolation_Model):
         pz = jnp.where(log10(k)>self.logk_max,0.,pz)
         return pz
 
-    def get_gwb_from_xy(self,x,y):
-        pz_interp = lambda k: self.spline(x=x,y=y,k=k) 
-        gwb = self.gwb_func(pz_interp,self.gwb_karr)
+    def get_gwb_from_xy(self,x,y,extra_args=None):
+        if self.extra_args:
+            pz_interp = lambda k, arg1, arg2: self.spline(k=k,x=x,y=y) 
+            gwb = self.gwb_func(pz_interp,self.gwb_karr,*extra_args)
+        else:
+            pz_interp = lambda k: self.spline(k=k,x=x,y=y) 
+            gwb = self.gwb_func(pz_interp,self.gwb_karr)
         return gwb
 
     def loss(self,y):
@@ -364,7 +387,8 @@ class Moving_Nodes_Model(Fixed_Nodes_Model):
                  gwb_means: jnp.ndarray,
                  gwb_cov: jnp.ndarray, 
                  gwb_method: str,
-                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200) },
+                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200), 
+                                            "kernel": "RD", "norm": "RD"},
                  y_low: float = -5.,
                  y_high: float = 1.,
                  ):
