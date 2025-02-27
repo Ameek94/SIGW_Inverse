@@ -1,11 +1,17 @@
+# We define the interpolation model classes here and methods to run the inference/optimization.
+
+# To do:
+# - Properly implement the moving nodes model including the loss function
+# - Improve the implementation of the non-standard kernels
+
+import numpy as np
+from jax import config
+config.update("jax_enable_x64", True)
 from jax import pmap, jit, random, value_and_grad, devices, device_count
 from jax.lax import map, scan
 from jax.scipy.linalg import cholesky, cho_solve
 import jax.numpy as jnp
 from typing import Callable, List, Tuple
-from jax import config
-import numpy as np
-config.update("jax_enable_x64", True)
 import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import MCMC, NUTS
@@ -14,8 +20,8 @@ enable_x64()
 num_devices = device_count()
 import optax
 from interpax import CubicSpline
-from interpolation.omega_gw_grid import OmegaGWGrid
-from interpolation.omega_gw_jax import OmegaGWjax
+from gwb.omega_gw_grid import OmegaGWGrid
+from gwb.omega_gw_jax import OmegaGWjax
 from scipy.optimize import basinhopping
 from math import pi
 
@@ -53,6 +59,15 @@ def spline_predict_log(x_train,y_train,x_pred):
 def spline_predict(x_train,y_train,x_pred):
     """
     Obtain spline prediction after exponentiating log10 P_zeta spline. 
+
+    Arguments
+    ----------
+    x_train: jnp.ndarray,
+        the training x values
+    y_train: jnp.ndarray,
+        the training y values
+    x_pred: jnp.ndarray,
+        the x values to predict at
     """
     x_pred = log10(x_pred)
     return pow10(spline_predict_log(x_train,y_train,x_pred))
@@ -208,7 +223,8 @@ class Interpolation_Model:
                           jit_model_args=False,
                           dense_mass=True,
                           max_tree_depth=6,
-                          seed=42):
+                          seed=42,
+                          verbose=True):
         """
         Run the HMC inference to sample the posterior distribution of the interpolation model parameters.
 
@@ -244,7 +260,8 @@ class Interpolation_Model:
         mcmc.run(rng_key,self.extra_args,extra_fields=("potential_energy",)) # this can be made faster - parallel
         samples = mcmc.get_samples()
         extras = mcmc.get_extra_fields()
-        mcmc.print_summary(exclude_deterministic=False)
+        if verbose:
+            mcmc.print_summary(exclude_deterministic=False)
         return samples, extras
     
 class Fixed_Nodes_Model(Interpolation_Model):
@@ -285,9 +302,9 @@ class Fixed_Nodes_Model(Interpolation_Model):
                  gwb_method: str,
                  gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200), 
                                             "kernel": "RD", "norm": "RD"},
-                 gwb_args_bounds: List[Tuple] = None, 
                  y_low: float = -5., 
                  y_high: float = 1.,
+                 gwb_args_bounds: List[Tuple] = None, 
                  ):            
         super().__init__(n_nodes,pz_kmin,pz_kmax,gwb_karr,gwb_means,gwb_cov,gwb_method,
                          gwb_method_kwargs=gwb_method_kwargs,gwb_args_bounds=gwb_args_bounds)
@@ -347,11 +364,95 @@ class Fixed_Nodes_Model(Interpolation_Model):
         alpha = cho_solve((self.gwb_cho,False),dgwb)
         chi2 = jnp.dot(dgwb,alpha)
         return 0.5*(chi2 + self.gwb_logdet + self.gwb_logfac) 
+    
+class Free_Nodes_Model(Fixed_Nodes_Model):
+    """
+    Class for interpolation with variable node positions. (Currently in development)
+    In the current implementation the node positions are allowed to vary freely between pz_kmin and pz_kmax.
+    Note that an additional 2 nodes are fixed at pz_kmin and pz_kmax. 
+
+    Arguments
+    ----------
+    n_nodes: int,
+        the number of free nodes
+    pz_kmin: float,
+        the minimum value of k for the interpolation. P_k = 0 for k < pz_kmin
+    pz_kmax: float,
+        the maximum value of k for the interpolation. P_k = 0 for k > pz_kmax
+    gwb_karr: jnp.ndarray,
+        the array of k values for the GWB, assumed to be the k-values over which GWB is inferred with its mean and covariance
+    gwb_means: jnp.ndarray,
+        the mean of the GWB at the k-values in gwb_karr
+    gwb_cov: jnp.ndarray,
+        the covariance of the GWB at the k-values in gwb_karr
+    gwb_method: str,
+        the method to use for the GWB interpolation. Either 'grid' or 'jax'
+    gwb_method_kwargs: dict,
+        the arguments for the GWB method
+    y_low: float,
+        the minimum possible value of the log10 P_zeta at the nodes
+    y_high: float,
+        the maximum possible value of the log10 P_zeta at the nodes
+    """
+
+    def __init__(self,
+                 n_nodes:int,
+                 pz_kmin: float,
+                 pz_kmax: float,
+                 gwb_karr: jnp.ndarray,
+                 gwb_means: jnp.ndarray,
+                 gwb_cov: jnp.ndarray, 
+                 gwb_method: str,
+                 gwb_method_kwargs: dict = {'s': jnp.linspace(0, 1, 15),   't': jnp.logspace(-4, 4, 200), 
+                                            "kernel": "RD", "norm": "RD"},
+                 y_low: float = -5.,
+                 y_high: float = 1.,
+                 ):
+        super().__init__(n_nodes,pz_kmin,pz_kmax,gwb_karr,gwb_means,gwb_cov,gwb_method,gwb_method_kwargs,y_low,y_high)
+
+        self.bin_edges = jnp.linspace(0.01,0.99,n_nodes-1) 
+        self.bin_edges = unit_untransform(self.bin_edges,bounds=[self.logk_min,self.logk_max])
+        self.lows = jnp.zeros(n_nodes)
+        self.highs = jnp.ones(n_nodes)
+        self.log_bounds = jnp.array([self.logk_min,self.logk_max])
+
+    def model(self,extra_args=False):
+        # get x values drawn from [0,1]^n_nodes
+        x_init = numpyro.sample("x_init",dist.Uniform(low=self.lows,high=self.highs))
+        # then apply the ordering transform
+        i = jnp.arange(self.n_nodes)
+        inner = jnp.power(1-x_init,1/(self.n_nodes-i))
+        x_ord = 1 - jnp.cumprod(inner)
+        # now that we have the ordered x values, we need to transform them back to the original domain
+        x_transformed = unit_untransform(x_ord,bounds=self.log_bounds)
+        x_full = numpyro.deterministic("x",jnp.concatenate
+                                       ([jnp.array([self.logk_min]),
+                                         jnp.array(x_transformed),
+                                         jnp.array([self.logk_max])]) )
+        train_y = self.sample_y()
+        gwb = super().get_gwb_from_xy(x_full,train_y)
+        # numpyro.sample('omk',dist.Normal(omks_mean,omks_sigma),obs=omks_gp) # this assumes omks are independent, if off-diagonal cov use below
+        numpyro.sample('omk',dist.MultivariateNormal(loc=self.gwb_means,covariance_matrix=self.gwb_cov),obs=gwb)
+    
+    def sample_y(self):
+        train_y = numpyro.sample('y',dist.Uniform
+                                 (low=self.logy_low*jnp.ones(self.n_nodes+2),
+                                  high=self.logy_high*jnp.ones(self.n_nodes+2)))  # type: ignore
+        return train_y
+    
+    def loss(self,params):
+        x, y = params[:self.n_nodes-2], params[self.n_nodes-2:]
+        x = jnp.concatenate([jnp.array([self.logk_min]),jnp.array(x),jnp.array([self.logk_max])])
+        gwb = self.get_gwb_from_xy(x=x,y=y)
+        return super()._loss(gwb) 
+    
+    def loglike(self,params):
+        return -self.loss(params)
 
 
 class Moving_Nodes_Model(Fixed_Nodes_Model):
     """
-    Class for interpolation with variable node positions. 
+    Class for interpolation with variable node positions. (Currently in development)
     In the current implementation the node positions are allowed to vary in bins of size (-log10_kmin + log10_kmax)/(n_nodes-1).
     Note thatn an additional 2 nodes are fixed at pz_kmin and pz_kmax. 
 
@@ -400,7 +501,7 @@ class Moving_Nodes_Model(Fixed_Nodes_Model):
         self.highs = self.bin_edges[1:]
         print(self.lows,self.highs)
 
-    def model(self):
+    def model(self,extra_args=False):
         x_bins = numpyro.sample("x_bins",dist.Uniform(low=self.lows,high=self.highs))
         x = numpyro.deterministic("x",jnp.concatenate([jnp.array([self.logk_min]),jnp.array(x_bins),jnp.array([self.logk_max])]) )
         train_y = self.sample_y()

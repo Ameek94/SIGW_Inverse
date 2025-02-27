@@ -8,3 +8,7 @@
 *.npz
 *.ipynb_checkpoints
 *.code-workspace
+test_kernels.py
+test_backends.py
+test*.ipynb
+chains*

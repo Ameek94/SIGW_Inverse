@@ -1,6 +1,7 @@
 import jax.numpy as jnp
-from jax import vmap
+from jax import vmap, tree
 import matplotlib.pyplot as plt
+from jaxns.internals.random import resample_indicies
 
 # minor modifications of https://github.com/martinjankowiak/saasbo/blob/main/util.py
 def split_vmap(func,input_arrays,batch_size=8):
@@ -40,3 +41,23 @@ def plot_best_spectra():
         ax1.axvline(jnp.exp(val),color='k',ls='-.',alpha=0.5)
     ax1.scatter(jnp.exp(nodes),jnp.exp(best_params),color='r')
     fig.tight_layout()
+
+
+# minor modifications of jax internal utils to get loglike at samples
+def resample(key, samples, log_weights, S: int = None,
+             replace: bool = True):
+    """
+    Resample the weighted samples into uniformly weighted samples.
+
+    Args:
+        key: PRNGKey
+        samples: samples from nested sampled results
+        log_weights: log-posterior weight
+        S: number of samples to generate. Will use Kish's estimate of ESS if None.
+        replace: whether to sample with replacement
+
+    Returns:
+        equally weighted samples
+    """
+    idx = resample_indicies(key, log_weights, S=S, replace=replace)
+    return tree.map(lambda s: s[idx, ...], samples), idx

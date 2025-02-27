@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.special import sici
-
+from gwb.base import BaseSpectrumCalculator
 import jax
 import jax.numpy as jnp
 from jax import jit, jvp, lax
@@ -587,7 +587,8 @@ def dP_zeta_auto(P_zeta, index, k, *params):
     _, deriv = jvp(lambda *args: P_zeta(*args), args, tangent_vector)
     return deriv
 
-class OmegaGWjax:
+class OmegaGWjax(BaseSpectrumCalculator):
+    # AM - modified
     """
     OmegaGW implementation with a fully vectorized jax implementation of
     Simpson's rule for non-uniform grids.
@@ -690,12 +691,14 @@ class OmegaGWjax:
             self.d_integration_routine = self.d_integrate_constant_kernel
             self.integrand = integrands[0]
             self.d_integrand = d_integrands[0]
+            self.extra_params = False
         elif kernel == "I_MD_to_RD":
             self.kernel = [I_sq_IRD_LV, I_sq_IRD_res]
             self.d_kernel = [d_I_sq_IRD_LV, d_I_sq_IRD_res]
             self.integration_routine = self.integrate_transitioning_kernel
             self.d_integration_routine = self.d_integrate_transitioning_kernel
             self.integrand = integrands[1]
+            self.extra_params = True
             if dP_zeta_has_delta:
                 self.d_integrand = d_integrands[2]
             else:
@@ -727,7 +730,7 @@ class OmegaGWjax:
             self.f = f
             if not upsample:
                 Warning("Providing f and not upsampling will result in f being ignored.")
-        elif isinstance(f, jnp.ndarray): # If f is an iterable, convert to array
+        elif isinstance(f, (list, tuple, np.ndarray, jnp.ndarray)): # If f is an iterable, convert to array # AM - added types
             self.f = jnp.array(f)
             if not upsample:
                 Warning("Providing f and not upsampling will result in f being ignored.")
@@ -735,6 +738,17 @@ class OmegaGWjax:
             raise ValueError("f should be None, a callable or an iterable. Got {}".format(type(f)))
         self.upsample = upsample
         self.to_numpy = to_numpy
+
+    def get_extra_param_specs(self): # AM - added
+        if self.extra_params:
+            try:
+                import numpyro.distributions as dist
+                return {"kmax": dist.LogUniform(1e-2,1.), "etaR": dist.LogUniform(1.,1e-2)}
+            except ImportError:
+                raise ImportError("numpyro is required for extra parameter sampling.")
+        else:
+            return {}
+
     
     def upsample_k(self, fvec_new, fvec, omega_gw):
         """
@@ -762,6 +776,7 @@ class OmegaGWjax:
             return np.array(res)
 
     def __call__(self, P_zeta, fvec, *params):
+        # AM - modified
         """
         Compute the :math:`Omega_{GW}` values.
 
@@ -776,7 +791,7 @@ class OmegaGWjax:
             Array of :math:`Omega_{GW}` values.
         """
         
-        # setting k for evaluation
+        # setting k for evaluation 
         # kvec_full_resolution = jnp.copy(jnp.array(fvec)) * 2 * jnp.pi
         # if self.upsample:
         #     if callable(self.f):
@@ -805,9 +820,9 @@ class OmegaGWjax:
 
         res = self.integration_routine(P_zeta, s, t, kvec, *params)
 
-        # out = 2 * self.norm(kvec_full_resolution) * self.upsample_k(kvec_full_resolution, kvec, res)
+        out = 2 * self.norm(kvec_full_resolution) * res # * self.upsample_k(kvec_full_resolution, kvec, res)
 
-        return res
+        return out
     
     def integrate_constant_kernel(self, P_zeta, s, t, kvec, *params):
         """
