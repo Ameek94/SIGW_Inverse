@@ -11,4 +11,4 @@
 test_kernels.py
 test_backends.py
 test*.ipynb
-chains*
+# chains*
