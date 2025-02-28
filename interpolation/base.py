@@ -17,6 +17,7 @@ class Interpolator:
         self.sample_nodes = sample_nodes
         self.num_nodes = num_nodes
         self.fixed_nodes = fixed_nodes if fixed_nodes is not None else jnp.linspace(self.k_min, self.k_max, num_nodes)
+        #add binned nodes
 
     def get_nodes(self):
         if self.sample_nodes:

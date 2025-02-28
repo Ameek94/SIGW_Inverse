@@ -72,6 +72,8 @@ class Spline(Interpolator):
                  method: str = "cubic",):
         super().__init__(k_min, k_max,sample_nodes,fixed_nodes,num_nodes)
         self.method = method
+        #add binned nodes
+
 
     def __call__(self, nodes, values, x):
         """
@@ -107,7 +109,7 @@ class Spline(Interpolator):
         func = CubicSpline(x = nodes, y = values, check=False,extrapolate=True)
 
         # Interpolate in log10-log10 space
-        # @jit
+        @jit
         def spline(x):
             logx = jnp.log10(x)
             res = jnp.power(10,func(logx) )
