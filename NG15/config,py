@@ -1,0 +1,12 @@
+pta_data = 'NG15'
+
+mode = 'ceffyl'
+
+mod_sel = False
+
+out_dir = './chains
+resume = False 
+N_samples = int(2e6) 
+
+# intrinsic red noises parameters
+red_components = 14 
