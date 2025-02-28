@@ -86,7 +86,7 @@ class NumpyroInference(BaseInference):
         model_args['frequencies'] = frequencies
 
         # Set up the NUTS kernel with the provided model.
-        kernel = NUTS(self.model)
+        kernel = NUTS(self.model,dense_mass=True,max_tree_depth=6)
         mcmc = MCMC(
             kernel,
             num_warmup=self.num_warmup,
