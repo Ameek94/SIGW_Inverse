@@ -37,7 +37,7 @@ gwb_calculator =  OmegaGWjax(s, t, f=None, kernel="RD", upsample=False,to_numpy=
 
 pz_amp = pz(p_arr)
 
-f = jnp.array([k_arr[5]])
+f = jnp.array([k_arr[::5]])
 print(f.shape)
 
 gwb_amp = gwb_calculator(pz,f)

@@ -4,9 +4,9 @@ mode = 'ceffyl'
 
 mod_sel = False
 
-out_dir = './chains
-resume = False 
-N_samples = int(2e6) 
+out_dir = './chains'
+resume = True 
+N_samples = int(1e4) 
 
 # intrinsic red noises parameters
 red_components = 14 

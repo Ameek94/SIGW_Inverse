@@ -77,7 +77,7 @@ def polynomial(t, s):
     return 2 * ((t * (2 + t) * (s**2 - 1)) / ((1 - s + t) * (1 + s + t)))**2
 
 # Radiation domination all the way
-# @jit
+@jit
 def I_sq_RD(t, s, k):
     """
     :math:`overline{I^2_{RD}(t, s, x\\to\\infty)}` assuming radiation domination.
@@ -106,7 +106,7 @@ def I_sq_RD(t, s, k):
 
 # Pure matter domination. This is unphysical.
 # UNUSED in favour of I_MD_TO_RD
-# @jit
+@jit
 def I_sq_MD(t, s, k):
     """
     :math:`overline{I^2_{RD}(t, s)}` assuming all modes are reentering
@@ -157,7 +157,7 @@ def _sici_precomp(x):
     return jnp.exp(jnp.interp(x, xvals, LV, left=jnp.nan, right=jnp.nan))
 
 d_LV = 1/xvals * (8.*cos*ci - 4*sin*(jnp.pi - 2*si))
-# @jit
+@jit
 def _d_sici_precomp(x):
     """
     Derivative of the precomputed term containing Si and Ci functions
@@ -179,7 +179,7 @@ def _d_sici_precomp(x):
 
 # Transition from an early matter dominated era to the RD era,
 # the u ~ v >> 1 contribution, i.e. large t
-# @jit
+@jit
 def I_sq_IRD_LV(t, s, k, kmax, etaR):
     """
     :math:`overline{I^2_{\rm IRD, LV}(t, s, k, k_{\rm max}, \eta_R)}` for the large V contribution
@@ -221,7 +221,7 @@ def I_sq_IRD_LV(t, s, k, kmax, etaR):
 
     return 4. * result # the factor of 4 comes from x_R^2/(x_R-x_R/2)^2
 
-# @jit
+@jit
 def d_I_sq_IRD_LV(index, t, s, k, kmax, etaR):
     """
     Compute the analytical gradient of the large V contribution to the transitioning kernel
@@ -258,7 +258,7 @@ def d_I_sq_IRD_LV(index, t, s, k, kmax, etaR):
 
 
 # the resonant contribution when u+v ~ 1/c_s, or t = sqrt(3) - 1
-# @jit
+@jit
 def I_sq_IRD_res(t, s, k, kmax, etaR):
     """
     :math:`overline{I^2_{\rm IRD, res}(t, s, k, \eta_R)}` for the resonant contribution
@@ -293,7 +293,7 @@ def I_sq_IRD_res(t, s, k, kmax, etaR):
     result = (fudge * (num/den) * ci_val)
     return 4 * result # the factor of 4 comes from x_R^2/(x_R-x_R/2)^2
 
-# @jit
+@jit
 def d_I_sq_IRD_res(index, t, s, k, kmax, etaR):
     """
     Compute the analytical gradient of the resonant contribution to the transitioning kernel
@@ -326,7 +326,7 @@ def d_I_sq_IRD_res(index, t, s, k, kmax, etaR):
     # Use lax.cond to select the derivative based on idx
     return lax.cond(index == 0, lambda _: grad_zero, lambda _: grad_etaR, operand=None)
 
-# @jit
+@jit
 def simpson_uniform(f, x):
     """
     Fully vectorized implementation of Simpson's rule for a uniform grid.
@@ -358,7 +358,7 @@ def simpson_uniform(f, x):
 
     return result
 
-# @jit
+@jit
 def simpson_nonuniform(f, x):
     """
     Numerical integration using Simpson's rule on a non-uniform grid.
