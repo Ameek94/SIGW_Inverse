@@ -34,7 +34,7 @@ def spline(nodes, values, x):
 gw_calc = OmegaGWjax(s=nodes, t=nodes, f=None, kernel="RD", upsample=False,to_numpy=True,jit=False)
 
 
-def spectrum(f, y0,y1,y2):
+def spectrum(f, y0,y1,y2,y3,y4):
     """
     Spectrum for the frequency
     """
@@ -45,7 +45,7 @@ def spectrum(f, y0,y1,y2):
         f = f.flatten()  
     # print(f.shape)
     # print(t.shape)
-    values = jnp.asarray([y0,y1,y2]).flatten()
+    values = jnp.asarray([y0,y1,y2,y3,y4]).flatten()
     # print(nodes.shape)
     # print(values.shape)
     pz_spline = lambda x: spline(nodes, values, x)
