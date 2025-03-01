@@ -12,9 +12,9 @@ import numpy as np
 num_nodes = 5
 h = 0.67
 smbhb = False
-name = 'sigw_'+str(num_nodes)+'_nodes'
+name = 'sigw_hd_'+str(num_nodes)+'_nodes'
 
-parameters = {'y%i' % i: prior("Uniform", -10, -2) for i in range(num_nodes)} # 
+parameters = {'y%i' % i: prior("Uniform", -10, -1) for i in range(num_nodes)} # 
 
 # print(parameters.keys())
 

@@ -9,4 +9,8 @@ resume = True
 N_samples = int(1e4) 
 
 # intrinsic red noises parameters
-red_components = 14 
+red_components = 30
+
+gwb_components = 14
+
+corr = True
