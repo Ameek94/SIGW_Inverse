@@ -48,15 +48,12 @@ class NestedSampler(BaseInference):
         Inference result (e.g., a NestedSampler object containing posterior samples).
         """
 
-        # prepare prior and loglikelihood depending on whether to sample node locations
-        # also handle sampling of additional variables required by the gwb model
-        model_args = self.model_args.copy()
+        # prepare prior and loglikelihood depending on whether to sample nodes,
 
         def prior():
 
 
-        def loglikeihood(nodes, values, extra_params):
-            
+        def loglikeihood(nodes, values)
 
         model = Model(self.model, data, **self.model_args)
         prior = Prior(self.model, **self.model_args)
