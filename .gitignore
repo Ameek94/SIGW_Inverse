@@ -13,3 +13,4 @@ test_backends.py
 test*.ipynb
 chains*
 NANOGrav15yr_KDE-FreeSpectra_v1.0.0/
+model_files/

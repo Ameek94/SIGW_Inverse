@@ -24,7 +24,7 @@ if len(sys.argv) != 2:
 num_nodes = int(sys.argv[1])
 
 # Load data files
-datadir = 'NANOGrav15yr_KDE-FreeSpectra_v1.0.0/30f_fs{cp}_ceffyl/'
+datadir = 'NANOGrav15yr_KDE-FreeSpectra_v1.0.0/30f_fs{hd}_ceffyl/'
 density = np.load(datadir + "density.npy").squeeze(axis=0)  # shape: (n_frequencies, n_grid_points)
 log10rhogrid = np.load(datadir + "log10rhogrid.npy")  # grid for log10rho values
 freqs = np.load(datadir + "freqs.npy")  # GW frequencies
@@ -62,7 +62,7 @@ OmegaGW_data = np.log10(OmegaGW_data)
 
 v1 = ax.violinplot(list(OmegaGW_data), np.log10(freqs), widths=0.05)
 
-chain_data = np.loadtxt(f"./chains/sigw_{num_nodes}_nodes/chain_0/chain_1.0.txt")
+chain_data = np.loadtxt(f"./chains/sigw_hd_{num_nodes}_nodes/chain_3/chain_1.txt")
 
 nodes = jnp.linspace(-9, -7, num_nodes)
 
@@ -94,7 +94,7 @@ def spectrum(f, *params):
 
 frequencies = freqs
 
-burn_in = num_nodes * 50
+burn_in = num_nodes * 75
 
 ys = chain_data[burn_in:, :num_nodes]
 logl = chain_data[burn_in:, num_nodes + 1]
@@ -143,4 +143,4 @@ fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=[ax1, ax2], label='Logl
 ax2.set_ylim(-12, -5.8)
 ax2.set_xlim(-8.8, -7.68)
 fig.suptitle(f'NG15 reconstructed spectra, number of nodes = {num_nodes}')
-plt.savefig(f'NG15_reconstructed_spectra_{num_nodes}_nodes.pdf', bbox_inches='tight')
+plt.savefig(f'NG15_reconstructed_HD_spectra_{num_nodes}_nodes.pdf', bbox_inches='tight')
