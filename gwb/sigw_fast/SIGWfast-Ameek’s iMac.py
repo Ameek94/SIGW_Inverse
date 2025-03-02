@@ -21,7 +21,7 @@ from scipy.interpolate import interp1d
 
 ### SIGWfast
 sys.path.append('libraries/')
-from gwb.sigw_fast.libraries import sdintegral as sd    
+import gwb.sigw_fast.libraries.sdintegral as sd
 
 #=============================================================================#
                               # CONFIGURATION #
@@ -30,7 +30,7 @@ from gwb.sigw_fast.libraries import sdintegral as sd
 # Name of file where Omega_GW(k) is to be stored as a .npz file in the data 
 # subdirectory. The k-values and Omega-GW-values will be stored with keywords 
 # 'karray' and 'OmegaGW' respectively.   
-# filenameGW = 'OmegaGW_of_k'
+filenameGW = 'OmegaGW_of_k'
 
 # Choose whether to regenerate the data. If True, Omega_GW(k) is recomputed in
 # every run. If False, the data in data/filenameGW.npz is plotted and new data    
@@ -50,27 +50,27 @@ Num_Pofk = False #True
 # P(k)-values are accessed via the keywords 'karray' and 'Pzeta'. This file is 
 # not needed if P(k) is provided via an analytic formula instead and no name
 # needs to be declared.
-# filenamePz = 'P_of_k'
+filenamePz = 'P_of_k'
 
 # Choose whether to compile a C++ module to perform the integration. If set to 
 # False the entire computation is peformed using existing python modules only.
 # Note that Use_Cpp = True will only work for Linux / MacOS, but not Windows.
-# Use_Cpp = False #True
+Use_Cpp = False #True
 
 # Set the normalisation factor that multiplies Omega_GW.
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
 norm = CG*OMEGA_R #1 
 
-# # Set limits kmin and kmax of the interval in k for which Omega_GW is to be 
-# # computed. Also set the number nk of entries of the k-array.
-# kmin = 0.01 # | in some arbitrary reference units
-# kmax = 2.50 # | denoted by k_{ref} in the plots.
-# nk   = 200
+# Set limits kmin and kmax of the interval in k for which Omega_GW is to be 
+# computed. Also set the number nk of entries of the k-array.
+kmin = 0.01 # | in some arbitrary reference units
+kmax = 2.50 # | denoted by k_{ref} in the plots.
+nk   = 200
 
-# # Fill the array of k-values for which Omega_GW is to be computed.
-# komega = np.linspace(kmin,kmax,nk,dtype=np.float64) # linear spacing
-# #komega = np.geomspace(kmin,kmax,nk,dtype=np.float64) # logarithmic spacing
+# Fill the array of k-values for which Omega_GW is to be computed.
+komega = np.linspace(kmin,kmax,nk,dtype=np.float64) # linear spacing
+#komega = np.geomspace(kmin,kmax,nk,dtype=np.float64) # logarithmic spacing
 
 #=============================================================================#
                     # PRIMORDIAL SCALAR POWER SPECTRUM #
@@ -83,40 +83,40 @@ norm = CG*OMEGA_R #1
 # choice. All other parameters should be defined as either global or local 
 # variables. 
 
-# ###############################################################################
-# ################# DEFINE YOUR OWN SCALAR POWER SPECTRUM HERE: #################
-# ###############################################################################
+###############################################################################
+################# DEFINE YOUR OWN SCALAR POWER SPECTRUM HERE: #################
+###############################################################################
 
-# # Default example: P(k) as arises for a strong sharp turn in the inflationary
-# # trajectory, see eq. (2.25) in arXiv:2012.02761. This exhibits O(1) 
-# # oscillations modulating a peaked envelope. Here P(k) is normalised by a 
-# # factor np.exp(-2*delta*etap) to avoid excessively large values. To account 
-# # for this, one should multiply the final result for Omega_GW by a factor
-# # np.exp(4*delta*etap).
+# Default example: P(k) as arises for a strong sharp turn in the inflationary
+# trajectory, see eq. (2.25) in arXiv:2012.02761. This exhibits O(1) 
+# oscillations modulating a peaked envelope. Here P(k) is normalised by a 
+# factor np.exp(-2*delta*etap) to avoid excessively large values. To account 
+# for this, one should multiply the final result for Omega_GW by a factor
+# np.exp(4*delta*etap).
 
-# # Define the model parameters as global variables with fixed values.
-# # Duration delta of the turn in e-folds
-# delta = 0.5
-# # Strength of the turn, i.e. turn rate in units of the Hubble scale
-# etap  = 14
-# # Normalisation of power spectrum 
-# P0    = 1 # 2.4*10**(-9) for CMB value
+# Define the model parameters as global variables with fixed values.
+# Duration delta of the turn in e-folds
+delta = 0.5
+# Strength of the turn, i.e. turn rate in units of the Hubble scale
+etap  = 14
+# Normalisation of power spectrum 
+P0    = 1 # 2.4*10**(-9) for CMB value
 
-# def Pofk(k):
-#     # P(k) in eq. (2.25) of arXiv:2012.02761 is valid for 0 < k < 2.
-#     # For some values of delta and etap one finds unphysical spikes for
-#     # k -> 0 or k -> 2. We remove these by cutting P(k) at k=kcut and k=2-kcut.
-#     kcut  = 0.001
-#     if k > 2-kcut:
-#         P = 0
-#     elif k < kcut:
-#         P = 0
-#     else:
-#         # Eq. (2.25) in arXiv:2012.02761 multiplied by np.exp(-2*delta*etap)
-#         P = np.exp(2*(np.sqrt((2-k)*k)-1)*delta*etap)/4/(2-k)/k*(
-#             1+(k-1)*np.cos(2*np.exp(-delta/2)*etap*k)
-#              +np.sqrt(abs(2-k)*k)*np.sin(2*np.exp(-delta/2)*etap*k))
-#     return P0*P
+def Pofk(k):
+    # P(k) in eq. (2.25) of arXiv:2012.02761 is valid for 0 < k < 2.
+    # For some values of delta and etap one finds unphysical spikes for
+    # k -> 0 or k -> 2. We remove these by cutting P(k) at k=kcut and k=2-kcut.
+    kcut  = 0.001
+    if k > 2-kcut:
+        P = 0
+    elif k < kcut:
+        P = 0
+    else:
+        # Eq. (2.25) in arXiv:2012.02761 multiplied by np.exp(-2*delta*etap)
+        P = np.exp(2*(np.sqrt((2-k)*k)-1)*delta*etap)/4/(2-k)/k*(
+            1+(k-1)*np.cos(2*np.exp(-delta/2)*etap*k)
+             +np.sqrt(abs(2-k)*k)*np.sin(2*np.exp(-delta/2)*etap*k))
+    return P0*P
 
 ###############################################################################
 ###############################################################################
@@ -128,9 +128,9 @@ norm = CG*OMEGA_R #1
 # By default, this interval is defined to be wider than komega by a factor 
 # fac^2 in log(k)-space and also to contain more entries than komega by a 
 # factor (int(fac))^2. The default value of this factor is chosen as fac=2. 
-# fac = 2
-# kpzeta = np.linspace(np.amin(komega)/fac, np.amax(komega)*fac,
-#                      (len(komega))*(int(fac))**2)
+fac = 2
+kpzeta = np.linspace(np.amin(komega)/fac, np.amax(komega)*fac,
+                     (len(komega))*(int(fac))**2)
 # Uncomment lines below if logarithmic spacing is desired.
 #kpzeta = np.geomspace(np.amin(komega)/fac, np.amax(komega)*fac,
 #                     (len(komega))*(int(fac))**2)
@@ -141,34 +141,34 @@ norm = CG*OMEGA_R #1
 
 # Prepare primordial power spectrum as an interpolation function.
 # Prepare from numerical data.
-# if Num_Pofk:
-#     try: 
-#         #Load data.
-#         Pdata  = np.load('data/'+filenamePz+'.npz')
-#         kpzeta = Pdata['karray']
-#         # Define interpolation function.
-#         Pinter = interp1d(Pdata['karray'], Pdata['Pzeta'], 
-#                           fill_value='extrapolate')
-#     except FileNotFoundError:
-#         print('No file data/'+filenamePz+'.npz!')
-#         sys.exit()
-# # Prepare from analytical formula.
-# else:
-#     # Discretize P(k) by evaluating Pofk on kpzeta. As Pofk(k) is not 
-#     # guaranteed to be vectorizable do this in an element-wise manner. The  
-#     # small performance loss is acceptable as this has to be done only once.
-#     Pdisc = np.zeros(len(kpzeta))
-#     for i in range(0, len(kpzeta)):
-#         Pdisc[i] = Pofk(kpzeta[i])
-#     # Define interpolation function.     
-#     Pinter = interp1d(kpzeta, Pdisc, fill_value='extrapolate')
-#     # For a vectorizable function Pofk(k) one could have used instead:
-#     #Pinter = interp1d(kpzeta, Pofk(kpzeta), fill_value='extrapolate')
-#     # Uncomment to save analytic power spectrum in numerical form
-#     #np.savez('data/'+filenameP, karray=kpzeta, Pzeta=Pinter(kpzeta))
+if Num_Pofk:
+    try: 
+        #Load data.
+        Pdata  = np.load('data/'+filenamePz+'.npz')
+        kpzeta = Pdata['karray']
+        # Define interpolation function.
+        Pinter = interp1d(Pdata['karray'], Pdata['Pzeta'], 
+                          fill_value='extrapolate')
+    except FileNotFoundError:
+        print('No file data/'+filenamePz+'.npz!')
+        sys.exit()
+# Prepare from analytical formula.
+else:
+    # Discretize P(k) by evaluating Pofk on kpzeta. As Pofk(k) is not 
+    # guaranteed to be vectorizable do this in an element-wise manner. The  
+    # small performance loss is acceptable as this has to be done only once.
+    Pdisc = np.zeros(len(kpzeta))
+    for i in range(0, len(kpzeta)):
+        Pdisc[i] = Pofk(kpzeta[i])
+    # Define interpolation function.     
+    Pinter = interp1d(kpzeta, Pdisc, fill_value='extrapolate')
+    # For a vectorizable function Pofk(k) one could have used instead:
+    #Pinter = interp1d(kpzeta, Pofk(kpzeta), fill_value='extrapolate')
+    # Uncomment to save analytic power spectrum in numerical form
+    #np.savez('data/'+filenameP, karray=kpzeta, Pzeta=Pinter(kpzeta))
 
 # Define rotine that computes Omega_GW(k) and returns the result as an array.
-def compute_r(Pofk, kpzeta, komega, Use_Cpp=True):
+def compute_r(Pofk,komega, kpzeta, Use_Cpp=True):
     # Declare arrays of integration variables d and s. The s-array is split
     # into two arrays for the interval s<sqrt(3), s1array, and one for the
     # interval s>sqrt(3), s2array. This split is done as the integration kernel
