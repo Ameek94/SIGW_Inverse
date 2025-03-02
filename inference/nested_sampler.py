@@ -5,7 +5,7 @@ from jaxns import Model, Prior
 from jaxns.framework.special_priors import ForcedIdentifiability
 tfpd = tfp.distributions
 
-class NestedSampler(BaseInference):
+class NS(BaseInference):
     """
     Nested sampling inference class using the JAX NestedSampler.
     """
@@ -58,9 +58,9 @@ class NestedSampler(BaseInference):
         def loglikeihood(nodes, values, extra_params):
             
 
-        model = Model(self.model, data, **self.model_args)
-        prior = Prior(self.model, **self.model_args)
-        termination_conditions = [TerminationCondition(self.termination_frac)]
-        sampler = NestedSampler(model, prior, termination_conditions, sampler_name=self.sampler_name, num_live_points=self.num_live_points, **self.sampler_kwargs)
-        result = sampler.run()
+        exact_ns = NestedSampler(model=model, max_samples=1e4,parameter_estimation=True,verbose=False,difficult_model=False)
+
+        termination_reason, state = exact_ns(random.PRNGKey(42),term_cond=TerminationCondition(dlogZ=0.2))
+        results = exact_ns.to_results(termination_reason=termination_reason, state=state)
+        exact_ns.summary(results)
         return result
