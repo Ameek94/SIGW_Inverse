@@ -11,6 +11,7 @@
 test_kernels.py
 test_backends.py
 test*.ipynb
-chains*
+examples/chains/
 NANOGrav15yr_KDE-FreeSpectra_v1.0.0/
 model_files/
+chains/
