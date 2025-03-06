@@ -21,7 +21,7 @@ from scipy.interpolate import interp1d
 
 ### SIGWfast
 sys.path.append('libraries/')
-from sigw_fast.libraries import sdintegral as sd    
+from gwb.sigw_fast.libraries import sdintegral as sd    
 
 #=============================================================================#
                               # CONFIGURATION #
@@ -174,7 +174,46 @@ def compute_r(Pofk, komega, Use_Cpp=True):
     # interval s>sqrt(3), s2array. This split is done as the integration kernel
     # diverges at s=sqrt(3). The argument kmin is needed as this sets the 
     # cutoff smax of the s-array.
-    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_r(komega)
+    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_r(komega, nd = 100)
+
+
+    print(f'nd shape = {nd}')
+    print(f'ns1 shape = {ns1}')
+    print(f'ns2 shape = {ns2}')
+    print(f'darray shape = {darray.shape}')
+    print(f'd1array shape = {d1array.shape}')
+    print(f'd2array shape = {d2array.shape}')
+    print(f's1array shape = {s1array.shape}')
+    print(f's2array shape = {s2array.shape}')
+
+    # check if d1 - s1 and d2-s2 are sorted
+    d_s = d1array - s1array
+    print(f'd1 - s1 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
+    print(f'd1 - s1 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
+    plt.hist(d_s, bins=100)
+    plt.show()
+
+
+    d_s = d2array - s2array
+    print(f'd2 - s2 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
+    print(f'd2 - s2 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
+    plt.hist(d_s, bins=100)
+    plt.show()
+
+    # check if d1 + s1 and d2 + s2 are sorted
+    d_s = d1array + s1array
+    print(f'd1 + s1 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
+    print(f'd1 + s1 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
+    plt.hist(d_s, bins=100)
+    plt.show()
+
+    d_s = d2array + s2array 
+    print(f'd2 + s2 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
+    print(f'd2 + s2 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
+    plt.hist(d_s, bins=100)
+    plt.show()
+
+
 
     Pinter = Pofk # 
     
@@ -221,6 +260,8 @@ def compute_r(Pofk, komega, Use_Cpp=True):
         kernel2 = sd.kernel2_r(d2array, s2array)
         # Compute Omega_GW for every value of k in komega by performing 
         # discrete integration over d and s.
+        # print(f"kernel 1 shape = {kernel1.shape}")
+        # print(f"kernel 2 shape = {kernel2.shape}")
         # for k in tqdm.tqdm(range(0,nk)): # Comment out to avoid using tqdm
         for k in range(0,nk): #Uncomment if tqdm is not imported
             # Fill in integrands as flattened arrays by multiplying the kernels
@@ -260,6 +301,9 @@ def compute_r(Pofk, komega, Use_Cpp=True):
             # by the two factors of the power spectrum
             Int_ds1 = kernel1*sd.Psquared(d1array, s1array, Pinter, komega[k])
             Int_ds2 = kernel2*sd.Psquared(d2array, s2array, Pinter, komega[k])
+
+            # print(f'Int_ds1 shape = {Int_ds1.shape}')
+            # print(f'Int_ds2 shape = {Int_ds2.shape}')
             # Loop over the d-array
             for i in range(0,nd):
                 # Implement the limits of integration over s on the indices

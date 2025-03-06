@@ -13,7 +13,7 @@ matplotlib.rc('font', **font)
 matplotlib.rc('text', usetex=True) # if using latex in plots
 matplotlib.rc('legend', fontsize=24)
 
-ll2 = []
+ll = []
 aic = []
 
 nodes = [2,3,4,5]
@@ -25,9 +25,9 @@ for n in nodes:
         best = np.max(chain_data[:, n+1])
         if best_n < best:
             best_n = best
-    ll2.append(2 * best_n)
+    ll.append(best_n)
     aic_n = 2*n - 2*best_n
     aic.append(aic_n)
 
-results = dict(zip(nodes, zip(ll2,aic)))
+results = dict(zip(nodes, zip(ll,aic)))
 print(results)

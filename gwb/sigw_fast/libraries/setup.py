@@ -22,8 +22,8 @@ if platform.system() == 'Darwin':
     # libc++ as libstdc++ is no longer supplied by MacOS / Xcode. With this
     # compilation should work on both current and older MacOS systems.
     sigwfast_module = Extension('sigwfast',sources = ['SIGWfast.cpp'], 
-                                extra_compile_args=["-stdlib=libc++"], 
-                                extra_link_args=["-stdlib=libc++"], 
+                                extra_compile_args=["-O3", "-march=native", "-ffast-math", "-Xpreprocessor", "-fopenmp", "-stdlib=libc++"],
+                               extra_link_args=["-stdlib=libc++"], 
                                 include_dirs=[numpy.get_include()])
 # Check whether the operating system is Linux.
 elif platform.system() == 'Linux':
