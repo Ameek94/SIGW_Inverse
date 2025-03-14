@@ -1,0 +1,12 @@
+Metadata-Version: 2.1
+Name: SIGWfastExtension
+Version: 1.0
+Summary: This is a package to perform the integrations in the computation of the scalar-induced gravitational wave spectrum.
+Home-page: https://github.com/Lukas-T-W
+Author: Lukas T. Witkowski
+Author-email: lukas.witkowski@iap.fr
+License: MIT License
+Platform: MacOS
+Platform: Linux
+
+SIGWfast is a python code to compute the Scalar-Induced Gravitational Wave spectrum from a primordial scalar power spectrum that can be given in analytical or numerical form. This extension performs the two-dimensional integrations needed in this computation using compiled C++ code. The code SIGWfast, including this extension, is distributed under the MIT license, a copy of which should be included with the code. If not, see https://spdx.org/licenses/MIT.html.
