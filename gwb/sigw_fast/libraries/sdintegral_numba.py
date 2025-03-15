@@ -1,20 +1,16 @@
-# This file is part of SIGWfast.
+# SIGWfast
+# This file includes code derived from [SIGWfast](https://github.com/Lukas-T-W/SIGWfast),
+# Originally written by [Lukas T. Witkowski].
+# MIT License
+# Copyright (c) 2022 Lukas T. Witkowski
+# Modifications have been made by Ameek Malhotra.
 
-# SIGWfast is free software: you can use, copy, modify, merge, publish and
-# distribute, sublicense, and/or sell copies of it, and to permit persons to
-# whom it is furnished to do so it under the terms of the MIT License.
-
-# SIGWfast is distributed in the hope that it will be useful,
-# but WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
-# LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
-# PURPOSE AND NONINFRINGEMENT. See the MIT License for more details.
-
-# You should have received a copy of the MIT License along with SIGWfast. If
-# not, see <https://spdx.org/licenses/MIT.html>.
 
 import numpy as np
 import scipy.special as special
+from numba import jit,njit, int64, float64, prange
 from math import floor
+
 
 # For w=1/3 the integration kernels defined below diverge. If w is thus too
 # close to w=1/3 we shift it to w=1/3-epsilon. This permits the computation to
@@ -110,79 +106,103 @@ def arrays_r(karray,epsilon=10**(-10),nd=100):
 #    return 0
 
 # Define function I_J^2 for c_s^2=w and s>1/sqrt(w)
+@njit(float64[:](float64[:],float64[:],float64),parallel=True,fastmath=True)
 def IJsq2_w(d,s,b):
     vv = (1-b)/3/(1+b)
     y  = (s**2+d**2-2/vv)/(s**2-d**2)
+    f = np.empty_like(y)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3/vv**2*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
-    P1 = ((1+y)/(1-y))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
-                                                            1+b,-b,1+b,(1-y)/2)
-    P2 = ((1+y)/(1-y))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
-                                                          3+b,-2-b,1+b,(1-y)/2)
-    f  = N/(s**2-d**2)**2*(1-y**2)**b*(P1+(2+b)/(1+b)*P2)**2
+    for i in prange(len(y)):
+        yi = y[i]
+        P1 = ((1+yi)/(1-yi))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
+                                                            1+b,-b,1+b,(1-yi)/2)
+        P2 = ((1+yi)/(1-yi))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
+                                                          3+b,-2-b,1+b,(1-yi)/2)
+        f[i] = N/(s[i]**2-d[i]**2)**2*(1-yi**2)**b*(P1+(2+b)/(1+b)*P2)**2
     return f
 
 # Define function I_Y^2 for c_s^2=w and s<1/sqrt(w) 
+@njit(float64[:](float64[:],float64[:],float64),parallel=True,fastmath=True)
 def IYsq1_w(d,s,b):
     vv = (1-b)/3/(1+b)
     y  =-(s**2+d**2-2/vv)/(s**2-d**2)
+    f = np.empty_like(y)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3/vv**2*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
-    Q3 = np.sqrt(np.pi)/2**(1+b)/y/special.gamma(b+3/2)*special.hyp2f1(
-                                                            1,1/2,b+3/2,1/y**2)
-    Q4 = np.sqrt(np.pi)/2**(3+b)/y**3/special.gamma(b+7/2)*special.hyp2f1(
-                                                            2,3/2,b+7/2,1/y**2)
-    f  = N/(s**2-d**2)**2*(4/np.pi/np.pi*(Q3+2*(2+b)/(1+b)*Q4)**2)
+    for i in prange(len(y)):
+        yi = y[i]
+
+        Q3 = np.sqrt(np.pi)/2**(1+b)/yi/special.gamma(b+3/2)*special.hyp2f1(
+                                                            1.,1/2,b+3/2,1/yi**2)
+        Q4 = np.sqrt(np.pi)/2**(3+b)/yi**3/special.gamma(b+7/2)*special.hyp2f1(
+                                                            2.,3/2,b+7/2,1/yi**2)
+        f[i]  = N/(s[i]**2-d[i]**2)**2*(4/np.pi/np.pi*(Q3+2*(2+b)/(1+b)*Q4)**2)
     return f
 
 # Define function I_Y^2 for c_s^2=w and s>1/sqrt(w) 
+@njit(float64[:](float64[:],float64[:],float64),parallel=True,fastmath=True)
 def IYsq2_w(d,s,b):
     vv = (1-b)/3/(1+b)
     y  = (s**2+d**2-2/vv)/(s**2-d**2)
+    f = np.empty_like(y)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3/vv**2*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
-    Q1 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+y)/(1-y))**(-b/2)/ \
-         special.gamma(1+b)*special.hyp2f1(1+b,-b,1+b,(1-y)/2)- \
-         special.gamma(1)/special.gamma(1+2*b)*((1-y)/(1+y))**(-b/2)/ \
-         special.gamma(1-b)*special.hyp2f1(1+b,-b,1-b,(1-y)/2))
-    Q2 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+y)/(1-y))**(-b/2)/ \
-         special.gamma(1+b)*special.hyp2f1(3+b,-2-b,1+b,(1-y)/2)- \
-         special.gamma(3)/special.gamma(3+2*b)*((1-y)/(1+y))**(-b/2)/ \
-         special.gamma(1-b)*special.hyp2f1(3+b,-2-b,1-b,(1-y)/2))
-    f  = N/(s**2-d**2)**2*(1-y**2)**b*(4/np.pi/np.pi*(Q1+(2+b)/(1+b)*Q2)**2)
+    for i in prange(len(y)):
+        yi = y[i]
+        Q1 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+yi)/(1-yi))**(-b/2)/ \
+         special.gamma(1+b)*special.hyp2f1(1+b,-b,1+b,(1-yi)/2)- \
+         special.gamma(1.)/special.gamma(1+2*b)*((1-yi)/(1+yi))**(-b/2)/ \
+         special.gamma(1-b)*special.hyp2f1(1+b,-b,1-b,(1-yi)/2))
+        Q2 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+yi)/(1-yi))**(-b/2)/ \
+         special.gamma(1+b)*special.hyp2f1(3+b,-2-b,1+b,(1-yi)/2)- \
+         special.gamma(3.)/special.gamma(3+2*b)*((1-yi)/(1+yi))**(-b/2)/ \
+         special.gamma(1-b)*special.hyp2f1(3+b,-2-b,1-b,(1-yi)/2))
+        f[i]  = N/(s[i]**2-d[i]**2)**2*(1-yi**2)**b*(4/np.pi/np.pi*(Q1+(2+b)/(1+b)*Q2)**2)
     return f
 
 # Define function I_J^2 for c_s^2=1
+@njit(float64[:](float64[:],float64[:],float64),parallel=True,fastmath=True)
 def IJsq2_1(d,s,b):
     y  = (s**2+d**2-2)/(s**2-d**2)
+    f = np.empty_like(y)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
-    P1 = ((1+y)/(1-y))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
-                                                            1+b,-b,1+b,(1-y)/2)
-    P2 = ((1+y)/(1-y))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
-                                                          3+b,-2-b,1+b,(1-y)/2)
-    f  = N/(s**2-d**2)**2*(1-y**2)**b*(P1+(2+b)/(1+b)*P2)**2
+    for i in prange(len(y)):
+        yi = y[i]
+        P1 = ((1+yi)/(1-yi))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
+                                                            1+b,-b,1+b,(1-yi)/2)
+        P2 = ((1+yi)/(1-yi))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
+                                                          3+b,-2-b,1+b,(1-yi)/2)
+        f[i]  = N/(s[i]**2-d[i]**2)**2*(1-yi**2)**b*(P1+(2+b)/(1+b)*P2)**2
     return f
 
 # Define function I_Y^2 for c_s^2=1 
+@njit(float64[:](float64[:],float64[:],float64),parallel=True,fastmath=True)
 def IYsq2_1(d,s,b):
     y  = (s**2+d**2-2)/(s**2-d**2)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
-    Q1 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+y)/(1-y))**(-b/2)/ \
-         special.gamma(1+b)*special.hyp2f1(1+b,-b,1+b,(1-y)/2)- \
-         special.gamma(1)/special.gamma(1+2*b)*((1-y)/(1+y))**(-b/2)/ \
-         special.gamma(1-b)*special.hyp2f1(1+b,-b,1-b,(1-y)/2))
-    Q2 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+y)/(1-y))**(-b/2)/ \
-         special.gamma(1+b)*special.hyp2f1(3+b,-2-b,1+b,(1-y)/2)- \
-         special.gamma(3)/special.gamma(3+2*b)*((1-y)/(1+y))**(-b/2)/ \
-         special.gamma(1-b)*special.hyp2f1(3+b,-2-b,1-b,(1-y)/2))
-    f  = N/(s**2-d**2)**2*(1-y**2)**b*(4/np.pi/np.pi*(Q1+(2+b)/(1+b)*Q2)**2)
+    f = np.empty_like(y)
+    for i in prange(len(y)):
+        yi = y[i]
+        Q1 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+yi)/(1-yi))**(-b/2)/ \
+         special.gamma(1+b)*special.hyp2f1(1+b,-b,1+b,(1-yi)/2)- \
+         special.gamma(1.)/special.gamma(1+2*b)*((1-yi)/(1+yi))**(-b/2)/ \
+         special.gamma(1-b)*special.hyp2f1(1+b,-b,1-b,(1-yi)/2))
+        Q2 = np.pi/2/np.sin(-np.pi*b)*(np.cos(-np.pi*b)*((1+yi)/(1-yi))**(-b/2)/ \
+         special.gamma(1+b)*special.hyp2f1(3+b,-2-b,1+b,(1-yi)/2)- \
+         special.gamma(3.)/special.gamma(3+2*b)*((1-yi)/(1+yi))**(-b/2)/ \
+         special.gamma(1-b)*special.hyp2f1(3+b,-2-b,1-b,(1-yi)/2))
+        f[i]  = N/(s[i]**2-d[i]**2)**2*(1-yi**2)**b*(4/np.pi/np.pi*(Q1+(2+b)/(1+b)*Q2)**2)
     return f
 
 # Define the prefactor that multiplies I_J^2 and I_Y^2 to obtain the transfer 
 # function.
+# @njit(fastmath=True) #, parallel=True)
 def pre(d,s):
+    # for i in prange(len(d)):
+    #     y[i] = ((d[i]**2-1)*(s[i]**2-1)/(d[i]**2-s[i]**2))**2
     y = ((s**2-1)*(d**2-1)/(d**2-s**2))**2
     return y
 
@@ -190,38 +210,56 @@ def pre(d,s):
 # Pofk in the computation of OmegaGW.
 # Integration kernel for c_s^2=w and s<1/sqrt(w)
 
+# @jit # @njit(fastmath=True)
 def kernel1_w(d,s,b):
     y = pre(d,s)*IYsq1_w(d,s,b)
     return y
 
 # Integration kernel for c_s^2=w and s>1/sqrt(w)
+# @jit #(fastmath=True)
 def kernel2_w(d,s,b):
     y = pre(d,s)*(IJsq2_w(d,s,b)+IYsq2_w(d,s,b))
     return y
 
 # Integration kernel for c_s^2=1
+# @jit # (fastmath=True)
 def kernel_1(d,s,b):
     y = pre(d,s)*(IJsq2_1(d,s,b)+IYsq2_1(d,s,b))
     return y
 
 # Integration kernel for radiation domination, c_s^2=w=1/3, for s<sqrt(3)
+# @njit(fastmath=True)
 def kernel1_r(d,s):
     y = 12*(d**2-1)**2*(s**2-1)**2*(d**2+s**2-6)**4/(s**2-d**2)**8*(
         (np.log((3-d**2)/(3-s**2))+2*(s**2-d**2)/(d**2+s**2-6))**2)
     return y
 
 # Integration kernel for radiation domination, c_s^2=w=1/3, for s>sqrt(3)
+# @njit(fastmath=True)
 def kernel2_r(d,s):
     y = 12*(d**2-1)**2*(s**2-1)**2*(d**2+s**2-6)**4/(s**2-d**2)**8*(
         (np.log((3-d**2)/(s**2-3))+2*(s**2-d**2)/(d**2+s**2-6))**2+np.pi**2)
     return y
 
 # Define the factor containing the two instances of P_zeta(k)
+# @jit(parallel=True,fastmath=True)
 def Psquared(d,s,P,k):
+    # y = np.empty_like(d)
+    # for i in prange(len(d)):
+    #     y[i] = P(k/2*(s[i]+d[i]))*P(k/2*(s[i]-d[i]))
     y = P(k/2*(s+d))*P(k/2*(s-d))
     return y
 
 # Define an integrator over 1D arrays based on the trapezoidal rule
-def intarray1D(f,dx):
-    S = (f[1:]+f[0:-1])*0.5*(dx[1:]-dx[0:-1])
-    return np.sum(S)
+@njit(parallel=True, fastmath=True)
+def intarray1D(f, dx):
+    n = f.shape[0]
+    S = 0.0
+    # Loop over segments in parallel.
+    for i in prange(n - 1):
+        S += 0.5 * (f[i] + f[i+1]) * (dx[i+1] - dx[i])
+    return S
+# @njit(fastmath=True)
+# def intarray1D(f,dx):
+#     S = (f[1:]+f[0:-1])*0.5*(dx[1:]-dx[0:-1])
+#     return np.sum(S)

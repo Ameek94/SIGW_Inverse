@@ -1,4 +1,8 @@
 *.pyc
+*.mod
+*.o
+*.so
+*.a
 *.out
 *.err
 *.sh
@@ -11,7 +15,9 @@
 test_kernels.py
 test_backends.py
 test*.ipynb
+build_fortran/
 examples/chains/
 NANOGrav15yr_KDE-FreeSpectra_v1.0.0/
 model_files/
 chains/
+ultranest_*/

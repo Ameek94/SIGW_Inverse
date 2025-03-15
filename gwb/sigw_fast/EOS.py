@@ -21,7 +21,11 @@ from scipy.interpolate import interp1d
 
 ### SIGWfast
 sys.path.append('./libraries/')
-import gwb.sigw_fast.libraries.sdintegral as sd
+try:
+    from sigw_fast.libraries import sdintegral_numba as sd
+except ModuleNotFoundError:
+    print("Numba not installed. Please install numba and numba-scipy to use the numba-scipy kernel (recommended for non-standard kernels). Using default scipy kernel.")
+    from sigw_fast.libraries import sdintegral as sd
 
 #=============================================================================#
                               # CONFIGURATION #
@@ -176,7 +180,7 @@ norm = CG*OMEGA_R #1
 #     # Uncomment to save analytic power spectrum in numerical form
 #     #np.savez('data/'+filenameP, karray=kpzeta, Pzeta=Pinter(kpzeta))
 
-def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
+def compute_w(Pofk,komega,Use_Cpp=True,w=1/3,nd=250):
     if (w<=0 or w>=1):
         print('Need to choose 0 < w < 1 with flag cs_equal_one = False.')
         sys.exit()
@@ -187,7 +191,7 @@ def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
     # interval s>1/sqrt(w), s2array. This split is done as for w >=1/3 the 
     # integration kernel diverges at s=1/sqrt(w). The argument kmin is needed
     # as this sets the cutoff smax of the s-array.
-    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,komega)
+    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,komega,nd=nd)
     
     Pinter = Pofk # 
 
@@ -234,7 +238,8 @@ def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
         kernel2 = sd.kernel2_w(d2array, s2array, beta)
         # Compute Omega_GW for every value of k in komega by performing   
         # discrete integration over d and s.
-        for k in tqdm.tqdm(range(0,nk)):
+        # for k in tqdm.tqdm(range(0,nk)):
+        for k in range(0,nk): #Uncomment if tqdm is not imported
             # Fill in integrands as flattened arrays by multiplying the kernels
             # by the two factors of the power spectrum
             Int_ds1 = kernel1*sd.Psquared(d1array, s1array, Pinter, komega[k])
@@ -245,11 +250,11 @@ def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
                                np.array(s2array),nd,ns1,ns2)
         # Multiply the result from the integration by the normalization and the
         # k-dependent redshift factor to get the final result of Omega_GW
-        OmegaGW = norm*(komega)**(-2*beta)*Int
+        OmegaGW = norm*Int * (komega)**(-2*beta)
         #Stop timer 
         end1 = time.time()
         #Total time is printed as output
-        print('total computation time =',end1-start1)
+        # print('total computation time =',end1-start1)
     
     else:        
         # Integration to compute Omega_GW.
@@ -288,11 +293,11 @@ def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
             Int[k] = sd.intarray1D(Int_d,darray)
         # Multiply the result from the integration by the normalization and the
         # k-dependent redshift factor to get the final result of Omega_GW
-        OmegaGW = norm*(komega)**(-2*beta)*Int
+        OmegaGW = norm*Int*(komega)**(-2*beta) #*Int
         #Stop timer 
         end1 = time.time()
         #Total time is printed as output
-        print('total computation time =',end1-start1)
+        # print('total computation time =',end1-start1)
     
     # Save results in npz file in data subfolder    
     # np.savez('data/'+filenameGW, karray=komega, OmegaGW=OmegaGW)
@@ -308,7 +313,7 @@ def compute_w(Pofk,komega,Use_Cpp=True,w=1/3):
     
     return OmegaGW
     
-def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
+def compute_1(Pofk,komega,Use_Cpp=True,w=1/3,nd=250):
     # Declare beta=(1-3w)/(1+3w)
     beta=sd.beta(w)
     # Declare arrays of integration variables d and s. The s-array is split
@@ -316,7 +321,7 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
     # interval s>1/sqrt(w), s2array. This split is done as for w >=1/3 the 
     # integration kernel diverges at s=1/sqrt(w). The argument kmin is needed
     # as this sets the cutoff smax of the s-array.
-    nd, ns, darray, ddarray, ssarray = sd.arrays_1(w,komega)
+    nd, ns, darray, ddarray, ssarray = sd.arrays_1(w,komega,nd=nd)
 
     Pinter = Pofk # 
     
@@ -372,7 +377,7 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
                                np.array(ssarray),nd,ns)
         # Multiply the result from the integration by the normalization and the
         # k-dependent redshift factor to get the final result of Omega_GW
-        OmegaGW = norm*(komega)**(-2*beta)*Int
+        OmegaGW = norm*Int #(komega)**(-2*beta)*Int
         #Stop timer 
         end1 = time.time()
         #Total time is printed as output
@@ -392,7 +397,8 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
         kernel = sd.kernel_1(ddarray, ssarray, beta)
         # Compute Omega_GW for every value of k in komega by performing 
         # discrete integration over d and s.
-        for k in tqdm.tqdm(range(0,nk)):
+        # for k in tqdm.tqdm(range(0,nk)):
+        for k in range(0,nk): #Uncomment if tqdm is not imported
             # Fill in integrands as flattened arrays by multiplying the kernels
             # by the two factors of the power spectrum
             Int_ds = kernel*sd.Psquared(ddarray, ssarray, Pinter, komega[k])
@@ -409,7 +415,7 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
             Int[k] = sd.intarray1D(Int_d,darray)
         # Multiply the result from the integration by the normalization and the
         # k-dependent redshift factor to get the final result of Omega_GW
-        OmegaGW = norm*(komega)**(-2*beta)*Int
+        OmegaGW = norm*Int #(komega)**(-2*beta)*Int
         #Stop timer 
         end1 = time.time()
         #Total time is printed as output
@@ -430,13 +436,12 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3):
     return OmegaGW
 
 
-def compute(Pofk, komega,w=1/3,cs_equal_one=False, Use_Cpp=True, fref=1e-3,f_rh=0.):
+def compute(Pofk, komega,nd = 150, w=1/3,cs_equal_one=False, Use_Cpp=True, fref=1.,f_rh=1e-6):
     if cs_equal_one:
         res = compute_1(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,)
     else:
-        res = compute_w(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,)
+        res = compute_w(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,nd=nd)
     two_b = 2 * (1-3*w)/(1+3*w) 
-    f_rh = 10**f_rh
     return res * (f_rh/fref)**(two_b)
 
 

@@ -21,7 +21,7 @@ from scipy.interpolate import interp1d
 
 ### SIGWfast
 sys.path.append('libraries/')
-from gwb.sigw_fast.libraries import sdintegral as sd    
+from sigw_fast.libraries import sdintegral as sd    
 
 #=============================================================================#
                               # CONFIGURATION #
@@ -168,51 +168,21 @@ norm = CG*OMEGA_R #1
 #     #np.savez('data/'+filenameP, karray=kpzeta, Pzeta=Pinter(kpzeta))
 
 # Define rotine that computes Omega_GW(k) and returns the result as an array.
-def compute_r(Pofk, komega, Use_Cpp=True):
+def compute_r(Pofk, komega, Use_Cpp=True,nd = 150):
     # Declare arrays of integration variables d and s. The s-array is split
     # into two arrays for the interval s<sqrt(3), s1array, and one for the
     # interval s>sqrt(3), s2array. This split is done as the integration kernel
     # diverges at s=sqrt(3). The argument kmin is needed as this sets the 
     # cutoff smax of the s-array.
-    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_r(komega, nd = 100)
+    nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_r(komega,nd=nd)
 
-
-    print(f'nd shape = {nd}')
-    print(f'ns1 shape = {ns1}')
-    print(f'ns2 shape = {ns2}')
-    print(f'darray shape = {darray.shape}')
-    print(f'd1array shape = {d1array.shape}')
-    print(f'd2array shape = {d2array.shape}')
-    print(f's1array shape = {s1array.shape}')
-    print(f's2array shape = {s2array.shape}')
-
-    # check if d1 - s1 and d2-s2 are sorted
-    d_s = d1array - s1array
-    print(f'd1 - s1 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
-    print(f'd1 - s1 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
-    plt.hist(d_s, bins=100)
-    plt.show()
-
-
-    d_s = d2array - s2array
-    print(f'd2 - s2 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
-    print(f'd2 - s2 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
-    plt.hist(d_s, bins=100)
-    plt.show()
-
-    # check if d1 + s1 and d2 + s2 are sorted
-    d_s = d1array + s1array
-    print(f'd1 + s1 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
-    print(f'd1 + s1 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
-    plt.hist(d_s, bins=100)
-    plt.show()
-
-    d_s = d2array + s2array 
-    print(f'd2 + s2 is descending order sorted = {np.all(d_s[:-1] <= d_s[1:])}')
-    print(f'd2 + s2 is ascending order sorted = {np.all(d_s[:-1] > d_s[1:])}')
-    plt.hist(d_s, bins=100)
-    plt.show()
-
+    # Print array shapes for debugging
+    # print(f"darray shape: {darray.shape}")
+    # print(f"d1array shape: {d1array.shape}")
+    # print(f"d2array shape: {d2array.shape}")
+    # print(f"s1array shape: {s1array.shape}")
+    # print(f"s2array shape: {s2array.shape}")
+    # print(f"nd: {nd}, ns1: {ns1}, ns2: {ns2}")
 
 
     Pinter = Pofk # 
@@ -227,7 +197,7 @@ def compute_r(Pofk, komega, Use_Cpp=True):
                 sys.path.append(path)
         try:
             # Attempt to import the module sigwfast
-            from sigwfast import sigwint_w
+            from sigw_fast.libraries.sigwfast import sigwint_w
         except ModuleNotFoundError:
             # If sigwfastdoes not yet exist, initiate its compilation.
             # Import modules needed to compile the new module.
@@ -258,10 +228,11 @@ def compute_r(Pofk, komega, Use_Cpp=True):
         # the integration over s<1/sqrt(w) and kernel2 for s>1/sqrt(w).
         kernel1 = sd.kernel1_r(d1array, s1array)
         kernel2 = sd.kernel2_r(d2array, s2array)
+
+        # print(f"kernel1 shape: {kernel1.shape}")
+        # print(f"kernel2 shape: {kernel2.shape}")
         # Compute Omega_GW for every value of k in komega by performing 
         # discrete integration over d and s.
-        # print(f"kernel 1 shape = {kernel1.shape}")
-        # print(f"kernel 2 shape = {kernel2.shape}")
         # for k in tqdm.tqdm(range(0,nk)): # Comment out to avoid using tqdm
         for k in range(0,nk): #Uncomment if tqdm is not imported
             # Fill in integrands as flattened arrays by multiplying the kernels
@@ -279,6 +250,54 @@ def compute_r(Pofk, komega, Use_Cpp=True):
         end1 = time.time()
         #Total time is printed as output
         # print('total computation time =',end1-start1)
+
+    # else:
+    #     # Add all directories within libraries/lib/python containing files to 
+    #     # python path to ensure the module sigwfast can be imported if it has
+    #     # been already compiled.
+    #     file_dir = os.path.dirname(__file__) + '/libraries'
+    #     for path, subdirs, files in os.walk(file_dir+'/lib/python'):
+    #         for name in files:
+    #             sys.path.append(path)
+    #     try:
+    #         # Attempt to import the module sigwfast
+    #         from sigwfast_fortran import sigwfast_mod
+    #     except ModuleNotFoundError:
+    #         print("Module sigwfast_fortran not found.")
+
+    #     # Integration to compute Omega_GW.
+    #     # Define array to hold the final result from the integration
+    #     nk = len(komega) # in case nk was not defined before
+    #     Int = np.zeros(nk)
+    #     # Start timer.           
+    #     start1 = time.time()
+    #     # Fill in the integration kernels that multiplies the two factors of
+    #     # the power spectrum as flattened arrays, with kernel1 to be used for
+    #     # the integration over s<1/sqrt(w) and kernel2 for s>1/sqrt(w).
+    #     kernel1 = sd.kernel1_r(d1array, s1array)
+    #     kernel2 = sd.kernel2_r(d2array, s2array)
+    #     # Compute Omega_GW for every value of k in komega by performing 
+    #     # discrete integration over d and s.
+    #     # for k in tqdm.tqdm(range(0,nk)): # Comment out to avoid using tqdm
+    #     for k in range(0,nk): #Uncomment if tqdm is not imported
+    #         # Fill in integrands as flattened arrays by multiplying the kernels
+    #         # by the two factors of the power spectrum
+    #         Int_ds1 = kernel1*sd.Psquared(d1array, s1array, Pinter, komega[k])
+    #         Int_ds2 = kernel2*sd.Psquared(d2array, s2array, Pinter, komega[k])
+    #         # Perform integration with function sigwint from compiled module
+    #         Int[k] = sigwfast_mod.sigwint_w(np.array(Int_ds1),np.array(Int_ds2),
+    #                            np.array(darray),np.array(s1array),
+    #                            np.array(s2array),nd,ns1,ns2)
+    #     # Multiply the result from the integration by the normalization to get
+    #     # the final result of Omega_GW
+    #     OmegaGW = norm*Int
+    #     #Stop timer 
+    #     end1 = time.time()
+    #     #Total time is printed as output
+    #     # print('total computation time =',end1-start1)
+
+    # return OmegaGW
+
     
     else:        
         # Integration to compute Omega_GW.
@@ -301,9 +320,6 @@ def compute_r(Pofk, komega, Use_Cpp=True):
             # by the two factors of the power spectrum
             Int_ds1 = kernel1*sd.Psquared(d1array, s1array, Pinter, komega[k])
             Int_ds2 = kernel2*sd.Psquared(d2array, s2array, Pinter, komega[k])
-
-            # print(f'Int_ds1 shape = {Int_ds1.shape}')
-            # print(f'Int_ds2 shape = {Int_ds2.shape}')
             # Loop over the d-array
             for i in range(0,nd):
                 # Implement the limits of integration over s on the indices
@@ -340,8 +356,8 @@ def compute_r(Pofk, komega, Use_Cpp=True):
     
     return OmegaGW
 
-def compute(Pofk, komega, Use_Cpp=True):
-    return compute_r(Pofk, komega, Use_Cpp)
+def compute(Pofk, komega, Use_Cpp=True,nd=150):
+    return compute_r(Pofk, komega, Use_Cpp, nd = nd)
 
 # def main():
 #     if regenerate:

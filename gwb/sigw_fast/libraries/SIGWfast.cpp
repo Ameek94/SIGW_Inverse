@@ -15,6 +15,8 @@
 #include <Python.h>
 #include "numpy/arrayobject.h"
 #include <omp.h>  // Include OpenMP
+// #include <iostream.h>
+// using namespace std;
 
 double *pyvector_to_Carrayptrs(PyArrayObject *arrayin) 
 {
@@ -61,34 +63,41 @@ static PyObject* sigwint_w(PyObject* self, PyObject* args){
 	   independent integrations */
 	cI=0;
 
-	// #pragma omp parallel for private(j) schedule(dynamic)
-	for (i=0; i<nd; i++)  {
-    	cId[i]=0;
-    	for (j=i*ns1+1; j<(i+1)*ns1; j++)  {
-    			cId[i]= cId[i]+(cInt1[j]+cInt1[j-1])*(cs1[j]-cs1[j-1])/2;
-    	};
-    	for (j=i*ns2+1; j<(i+1)*ns2; j++)  {
-    			cId[i]= cId[i]+(cInt2[j]+cInt2[j-1])*(cs2[j]-cs2[j-1])/2;
-    	};
-    	// if( i == 0 ) {} else {cI= cI+(cId[i]+cId[i-1])*(cd[i]-cd[i-1])/2;};   	
-	};
+	#pragma omp parallel for private(j) schedule(dynamic)
+	for (i = 0; i < nd; i++) {
+		cId[i] = 0;
+		for (j = i * ns1 + 1; j < (i + 1) * ns1; j++) {
+			cId[i] += (cInt1[j] + cInt1[j - 1]) * (cs1[j] - cs1[j - 1]) / 2;
+		}
+		for (j = i * ns2 + 1; j < (i + 1) * ns2; j++) {
+			cId[i] += (cInt2[j] + cInt2[j - 1]) * (cs2[j] - cs2[j - 1]) / 2;
+		}
+	}
 
-	// #pragma omp parallel for reduction(+:cI) schedule(dynamic)
-	for (i = 1; i < nd; i++) {
-    	cI += (cId[i] + cId[i - 1]) * (cd[i] - cd[i - 1]) / 2;
-	};
-
-	// #ifdef _OPENMP
-    // #pragma omp parallel
+	// #pragma omp parallel
     // {
-    //     #pragma omp single
-    //     {
-    //         printf("sigwint_w Using %d threads\n", omp_get_num_threads());
-	// 		fflush(stdout);  // Flush the output so it appears immediately
-    //     }
+    //     int thread_id = omp_get_thread_num();
+    //     int num_threads = omp_get_num_threads();
+    //     #pragma omp critical
+    //     std::cout << "Thread " << thread_id << " of " << num_threads << " is running.\n";
     // }
-	// #endif
+	
+	// Parallel reduction for the final sum
+	#pragma omp parallel for reduction(+:cI) schedule(dynamic)
+	for (i = 1; i < nd; i++) {
+		cI += (cId[i] + cId[i - 1]) * (cd[i] - cd[i - 1]) / 2;
+	}	
 
+	// for (i=0; i<nd; i++)  {
+    // 	cId[i]=0;
+    // 	for (j=i*ns1+1; j<(i+1)*ns1; j++)  {
+    // 			cId[i]= cId[i]+(cInt1[j]+cInt1[j-1])*(cs1[j]-cs1[j-1])/2;
+    // 	};
+    // 	for (j=i*ns2+1; j<(i+1)*ns2; j++)  {
+    // 			cId[i]= cId[i]+(cInt2[j]+cInt2[j-1])*(cs2[j]-cs2[j-1])/2;
+    // 	};
+    // 	if( i == 0 ) {} else {cI= cI+(cId[i]+cId[i-1])*(cd[i]-cd[i-1])/2;};   	
+	// };
 
     /* Export integration result*/
     return Py_BuildValue("d",cI);
@@ -123,30 +132,29 @@ static PyObject* sigwint_1(PyObject* self, PyObject* args){
 	/* Do the calculation: Two nested discrete integrations using the 
 	   trapezoidal rule */
 	cI=0;
-	// #pragma omp parallel for private(j) schedule(dynamic)
-	for (i=0; i<nd; i++)  {
-    	cId[i]=0;
-    	for (j=i*ns+1; j<(i+1)*ns; j++)  {
-    			cId[i]= cId[i]+(cInt[j]+cInt[j-1])*(cs[j]-cs[j-1])/2;
-    	};
-    	// if( i == 0 ) {} else {cI= cI+(cId[i]+cId[i-1])*(cd[i]-cd[i-1])/2;};   	
-	};
 
-	// #pragma omp parallel for reduction(+:cI) schedule(dynamic)
+	#pragma omp parallel for private(j) schedule(dynamic)
+	for (i = 0; i < nd; i++) {
+		cId[i] = 0;
+		for (j = i * ns + 1; j < (i + 1) * ns; j++) {
+			cId[i] += (cInt[j] + cInt[j - 1]) * (cs[j] - cs[j - 1]) / 2;
+		}
+	}
+	
+	// Parallel reduction for final integration
+	#pragma omp parallel for reduction(+:cI) schedule(dynamic)
 	for (i = 1; i < nd; i++) {
-    	cI += (cId[i] + cId[i - 1]) * (cd[i] - cd[i - 1]) / 2;
-	};
+		cI += (cId[i] + cId[i - 1]) * (cd[i] - cd[i - 1]) / 2;
+	}
+	
 
-	// #ifdef _OPENMP
-    // #pragma omp parallel
-    // {
-    //     #pragma omp single
-    //     {
-    //         printf("sigwint_1 Using %d threads\n", omp_get_num_threads());
-	// 		fflush(stdout);  // Flush the output so it appears immediately
-    //     }
-    // }
-	// #endif
+	// for (i=0; i<nd; i++)  {
+    // 	cId[i]=0;
+    // 	for (j=i*ns+1; j<(i+1)*ns; j++)  {
+    // 			cId[i]= cId[i]+(cInt[j]+cInt[j-1])*(cs[j]-cs[j-1])/2;
+    // 	};
+    // 	if( i == 0 ) {} else {cI= cI+(cId[i]+cId[i-1])*(cd[i]-cd[i-1])/2;};   	
+	// };
 
     /* Export integration result*/
     return Py_BuildValue("d",cI);

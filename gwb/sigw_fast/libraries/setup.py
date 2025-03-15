@@ -14,21 +14,33 @@
 
 from distutils.core import setup, Extension
 import numpy, platform, sys
+import os
+# os.environ["CC"] = "gcc-14"
+# os.environ["CXX"] = "g++-14"
 
 # Collect instructions for compilation of extension.
 # Check whether the operating system is MacOS.
+homebrew_prefix = "/opt/homebrew"  # Use "/usr/local" if on Intel Mac
+
+openmp_include = f"{homebrew_prefix}/opt/libomp/include"
+openmp_lib = f"{homebrew_prefix}/opt/libomp/lib"
+
+# Select appropriate compilation flags for macOS and Linux
 if platform.system() == 'Darwin':
-    # Set compiler and linker flag -stdlib=libc++ explicitly to build against
-    # libc++ as libstdc++ is no longer supplied by MacOS / Xcode. With this
-    # compilation should work on both current and older MacOS systems.
-    sigwfast_module = Extension('sigwfast',sources = ['SIGWfast.cpp'], 
-                                extra_compile_args=["-O3", "-march=native", "-ffast-math", "-Xpreprocessor", "-fopenmp", "-stdlib=libc++"],
-                               extra_link_args=["-stdlib=libc++"], 
-                                include_dirs=[numpy.get_include()])
-# Check whether the operating system is Linux.
+    sigwfast_module = Extension(
+        'sigwfast',
+        sources=['SIGWfast.cpp'],
+        extra_compile_args=['-Xpreprocessor', '-fopenmp', '-stdlib=libc++', f"-I{openmp_include}"],
+        extra_link_args=['-L' + openmp_lib, '-lomp', '-stdlib=libc++'],
+        include_dirs=[numpy.get_include(), openmp_include]
+    )
 elif platform.system() == 'Linux':
-    sigwfast_module = Extension('sigwfast',sources = ['SIGWfast.cpp'], 
-                                include_dirs=[numpy.get_include()])
+    sigwfast_module = Extension(
+        'sigwfast',
+        sources=['SIGWfast.cpp'],
+        extra_compile_args=["-fopenmp"],
+        extra_link_args=["-fopenmp"],
+        include_dirs=[numpy.get_include()])
 else:
     print('C++ extension not supported by your system.')
     sys.exit()
