@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from nautilus import Sampler
 import math
+from mpi4py.futures import MPIPoolExecutor
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -120,14 +121,16 @@ def main():
     loglikelihood = partial(likelihood, free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_wfld_{num_nodes}.h5')
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False
+                      ,filepath=f'{gwb_model}_wfld_{num_nodes}.h5'
+                      ,pool=(None, MPIPoolExecutor()))
 
-    sampler.run(verbose=True, f_live=0.01)
-    print('log Z: {:.2f}'.format(sampler.log_z))
+    sampler.run(verbose=True, f_live=0.005,n_like_max=int(5e6),n_eff=4000*free_nodes)
+    print('log Z: {:.4f}'.format(sampler.log_z))
 
     samples, logl, logwt = sampler.posterior()
 
-    np.savez(f'{gwb_model}_wfld_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt)
+    np.savez(f'{gwb_model}_wfld_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z)
     print("Nested sampling complete")
 
     rstate = np.random.default_rng(100000)
@@ -136,48 +139,48 @@ def main():
     print(f"Max and min logprob: {np.max(lp)}, {np.min(lp)}")
     # np.savez(f'{gwb_model}_wfld_{num_nodes}.npz', samples=samples, logl=lp)
 
-    p_arr = np.geomspace(pk_min * 1.001, pk_max * 0.999, 100, endpoint=True)
-    ws = samples[:, 0]
-    log10_f_rhs = samples[:, 1]
-    xs = samples[:, 2:free_nodes + 2]
-    ys = samples[:, free_nodes + 2:]
-    thinning = len(samples) // 32
-    cmap = matplotlib.colormaps['Reds']
-    ys = ys[::thinning]
-    xs = xs[::thinning]
-    lp = lp[::thinning] 
-    lp_min, lp_max = np.min(lp), np.max(lp)
-    cols = (lp - lp_min) / (lp_max - lp_min)
-    norm = colors.Normalize(lp_min, lp_max)
+    # p_arr = np.geomspace(pk_min * 1.001, pk_max * 0.999, 100, endpoint=True)
+    # ws = samples[:, 0]
+    # log10_f_rhs = samples[:, 1]
+    # xs = samples[:, 2:free_nodes + 2]
+    # ys = samples[:, free_nodes + 2:]
+    # thinning = len(samples) // 32
+    # cmap = matplotlib.colormaps['Reds']
+    # ys = ys[::thinning]
+    # xs = xs[::thinning]
+    # lp = lp[::thinning] 
+    # lp_min, lp_max = np.min(lp), np.max(lp)
+    # cols = (lp - lp_min) / (lp_max - lp_min)
+    # norm = colors.Normalize(lp_min, lp_max)
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), layout='constrained')
+    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), layout='constrained')
 
-    def get_pz_omega(w, log10_f_rh, x, y):
-        pz_amps = gw.power_spectrum_k_array(x, y, p_arr)
-        gwb_res = compute_w(w, log10_f_rh, x, y, frequencies, use_mp=False, nd=150)
-        return pz_amps, gwb_res
+    # def get_pz_omega(w, log10_f_rh, x, y):
+    #     pz_amps = gw.power_spectrum_k_array(x, y, p_arr)
+    #     gwb_res = compute_w(w, log10_f_rh, x, y, frequencies, use_mp=False, nd=150)
+    #     return pz_amps, gwb_res
 
-    for i, y in enumerate(ys):
-        w = ws[i]
-        log10_f_rh = log10_f_rhs[i]
-        x = np.pad(xs[i], (1, 1), 'constant', constant_values=(left_node, right_node))
-        pz_amps, gwb_amps = get_pz_omega(w, log10_f_rh, x, y)
-        ax1.loglog(p_arr, pz_amps, alpha=0.25, color=cmap(cols[i]))
-        ax1.scatter(10**(x), 10**(ys[i]), s=16, alpha=0.5, color=cmap(cols[i]))
-        ax2.loglog(frequencies, gwb_amps, alpha=0.25, color=cmap(cols[i]))
+    # for i, y in enumerate(ys):
+    #     w = ws[i]
+    #     log10_f_rh = log10_f_rhs[i]
+    #     x = np.pad(xs[i], (1, 1), 'constant', constant_values=(left_node, right_node))
+    #     pz_amps, gwb_amps = get_pz_omega(w, log10_f_rh, x, y)
+    #     ax1.loglog(p_arr, pz_amps, alpha=0.25, color=cmap(cols[i]))
+    #     ax1.scatter(10**(x), 10**(ys[i]), s=16, alpha=0.5, color=cmap(cols[i]))
+    #     ax2.loglog(frequencies, gwb_amps, alpha=0.25, color=cmap(cols[i]))
 
-    pz_amp = data[f'pk_{gwb_model}']
-    p_arr = data['pk_arr']
-    ax1.loglog(p_arr, pz_amp, color='k', lw=1.5)
-    ax2.loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
-    ax2.legend()
-    ax1.set_ylabel(r'$P_{\zeta}(k)$')
-    ax1.set_xlabel(r'$k$')
-    ax2.errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt="", color='k', label='data', capsize=2, ecolor='k')
-    ax2.set_ylabel(r'$\Omega_{\mathrm{GW}}(k)$')
-    ax2.set_xlabel(r'$k$')
-    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=[ax1, ax2], label='Logprob')
-    plt.savefig(f"{gwb_model}_wfld_nautilus_sigwfast_{num_nodes}.pdf")
+    # pz_amp = data[f'pk_{gwb_model}']
+    # p_arr = data['pk_arr']
+    # ax1.loglog(p_arr, pz_amp, color='k', lw=1.5)
+    # ax2.loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
+    # ax2.legend()
+    # ax1.set_ylabel(r'$P_{\zeta}(k)$')
+    # ax1.set_xlabel(r'$k$')
+    # ax2.errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt="", color='k', label='data', capsize=2, ecolor='k')
+    # ax2.set_ylabel(r'$\Omega_{\mathrm{GW}}(k)$')
+    # ax2.set_xlabel(r'$k$')
+    # fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=[ax1, ax2], label='Logprob')
+    # plt.savefig(f"{gwb_model}_wfld_nautilus_sigwfast_{num_nodes}.pdf")
 
 if __name__ == "__main__":
     main()
