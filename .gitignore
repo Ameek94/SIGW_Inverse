@@ -12,6 +12,5 @@ test_kernels.py
 test_backends.py
 test*.ipynb
 chains*
-NG15/
 gaussian_shells.py
 model_files/
