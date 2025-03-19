@@ -4,14 +4,13 @@ import time
 import warnings
 import math
 import numpy as np
+from jax import config, vmap, jit
+config.update("jax_enable_x64", True)
 import jax
-from jax import vmap, jit, grad, random, jacfwd
 import jax.numpy as jnp
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
-import numpyro
-numpyro.enable_x64()
 from omega_gw_jax import OmegaGWjax
 from getdist import plots, MCSamples, loadMCSamples
 from interpax import CubicSpline
@@ -104,7 +103,7 @@ def get_gwb(nodes, vals):
     return (omegagw,)
 
 # JIT compile get_gwb for speed.
-get_gwb_func = jax.jit(get_gwb)
+get_gwb_func = jit(get_gwb)
 
 def likelihood(params):
     params = jnp.atleast_2d(params)
@@ -213,10 +212,10 @@ def main():
     # Set up the sampler.
     ndim = free_nodes + num_nodes
     sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
-                                            ,pool=(None,MPIPoolExecutor()) )
+                                            ,pool=(None,MPIPoolExecutor()),filepath=f'./nautilus_{model}_{num_nodes}_nodes.h5') 
 
     start = time.time()
-    sampler.run(verbose=True, f_live=0.005, n_like_max=1e6*free_nodes, n_eff=2000*ndim)
+    sampler.run(verbose=True, f_live=0.01, n_like_max=1e7)#, n_eff=2000*ndim)
     end = time.time()
     print('Time taken: {:.2f} s'.format(end - start))
     print('log Z: {:.2f}'.format(sampler.log_z))
@@ -228,39 +227,39 @@ def main():
     print(logl.shape)
     print(logwt.shape)
 
-    # Resample to obtain equally weighted samples.
-    rstate = np.random.default_rng(100000)
-    samples, lp = resample_equal(samples, logl, logwt, rstate=rstate)
-    print("Obtained equally weighted samples")
-    print(f"Max and min logprob: {np.max(lp)}, {np.min(lp)}")
-    print(len(lp))
+    # # Resample to obtain equally weighted samples.
+    # rstate = np.random.default_rng(100000)
+    # samples, lp = resample_equal(samples, logl, logwt, rstate=rstate)
+    # print("Obtained equally weighted samples")
+    # print(f"Max and min logprob: {np.max(lp)}, {np.min(lp)}")
+    # print(len(lp))
 
-    # Postprocessing: Compute functional posteriors.
-    p_arr_local = jnp.logspace(left_node + 0.001, right_node - 0.001, 150)
-    thinning = samples.shape[0] // 512
-    xs = samples[:, :free_nodes][::thinning]
-    ys = samples[:, free_nodes:][::thinning]
-    xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
-    ys = jnp.array(ys)
-    pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
+    # # Postprocessing: Compute functional posteriors.
+    # p_arr_local = jnp.logspace(left_node + 0.001, right_node - 0.001, 150)
+    # thinning = samples.shape[0] // 512
+    # xs = samples[:, :free_nodes][::thinning]
+    # ys = samples[:, free_nodes:][::thinning]
+    # xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
+    # ys = jnp.array(ys)
+    # pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
 
-    print(pz_amps.shape)
-    print(gwb_amps.shape)
+    # print(pz_amps.shape)
+    # print(gwb_amps.shape)
 
-    fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
-                                        k_arr=[p_arr_local, frequencies],
-                                        aspect_ratio=(6, 4))
-    ax[0].loglog(p_arr_local, pz_amp, color='k', lw=1.5)
-    ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
+    # fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
+    #                                     k_arr=[p_arr_local, frequencies],
+    #                                     aspect_ratio=(6, 4))
+    # ax[0].loglog(p_arr_local, pz_amp, color='k', lw=1.5)
+    # ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
 
-    # Add secondary x-axis (e.g. converting f [Hz] to k [Mpc^{-1}]).
-    k_mpc_f_hz = 2 * np.pi * 1.03 * 10**14
-    for x in ax:
-        secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz,
-                                                       lambda x: x / k_mpc_f_hz))
-        secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$", labelpad=10)
+    # # Add secondary x-axis (e.g. converting f [Hz] to k [Mpc^{-1}]).
+    # k_mpc_f_hz = 2 * np.pi * 1.03 * 10**14
+    # for x in ax:
+    #     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz,
+    #                                                    lambda x: x / k_mpc_f_hz))
+    #     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$", labelpad=10)
 
-    plt.savefig(f'{model}_{num_nodes}.pdf', bbox_inches='tight')
+    # plt.savefig(f'{model}_{num_nodes}.pdf', bbox_inches='tight')
     # plt.show()
 
 if __name__ == '__main__':

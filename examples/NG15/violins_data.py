@@ -18,13 +18,13 @@ import matplotlib.pyplot as plt
 import jax.numpy as jnp
 from plot_utils import split_vmap, plot_functional_posterior, resample_equal
 
-# Command line argument for number of nodes
-if len(sys.argv) != 2:
-    print("Usage: python script.py <num_nodes>")
-    sys.exit(1)
+# # Command line argument for number of nodes
+# if len(sys.argv) != 2:
+#     print("Usage: python script.py <num_nodes>")
+#     sys.exit(1)
 
-num_nodes = int(sys.argv[1])
-free_nodes = num_nodes - 2
+# num_nodes = int(sys.argv[1])
+# free_nodes = num_nodes - 2
 # Load data files
 datadir = './NG15_Ceffyl/30f_fs{hd}_ceffyl/'
 density = np.load(datadir + "density.npy").squeeze(axis=0)  # shape: (n_frequencies, n_grid_points)
@@ -35,6 +35,8 @@ n_samples = 100000
 
 # Prepare a list to store sampled data for each frequency
 data_list = []
+
+np.random.seed(1000)
 
 # Assuming density has shape (n_frequencies, n_grid_points)
 for i in range(density.shape[0]):

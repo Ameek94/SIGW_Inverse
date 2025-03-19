@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from jax import vmap, jit
 import matplotlib.pyplot as plt
-from jaxns.internals.random import resample_indicies
+# from jaxns.internals.random import resample_indicies
 import numpy as np
 from scipy.special import logsumexp
 

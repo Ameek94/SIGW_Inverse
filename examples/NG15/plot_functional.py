@@ -75,7 +75,7 @@ t_expanded = jnp.expand_dims(t, axis=-1)
 ## Repeat t along the new axis to match the shape (100, 1000)
 t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
 gwb_calculator = OmegaGWjax(s=s,t=t,f=frequencies,norm="RD",jit=True,to_numpy=False)
-p_arr = jnp.logspace(left_node+0.001, right_node-0.001, 50)
+p_arr = jnp.logspace(left_node+0.001, right_node-0.001, 150)
 
 def interpolate(nodes,vals,x):
     spl = CubicSpline(nodes,vals,check=False)
@@ -98,7 +98,7 @@ logwt = run_data['logwt']
 
 rstate = np.random.RandomState(42)
 resampled_samples, resampled_logl = resample_equal(samples, logl, logwt, rstate)
-thinning = len(resampled_samples) // 256
+thinning = max(1,len(resampled_samples) // 2048)
 ys = resampled_samples[:,free_nodes:][::thinning]
 ys = resampled_samples[:,free_nodes:][::thinning]
 ys = jnp.array(ys)

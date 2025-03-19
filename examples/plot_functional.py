@@ -85,7 +85,7 @@ pk_min, pk_max = min(p_arr), max(p_arr)
 left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
 y_min = -6.
-y_max = -1.
+y_max = -2.
 
 # get the samples
 samples_data = np.load(f'./nautilus_{model}_{num_nodes}_nodes.npz')

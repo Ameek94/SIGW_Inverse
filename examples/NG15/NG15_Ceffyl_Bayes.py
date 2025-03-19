@@ -146,7 +146,7 @@ def main():
                       ,pool=(None,MPIPoolExecutor()) )
     # print("Starting Sampling")
     start = time.time()
-    sampler.run(verbose=True,f_live=0.001,n_like_max=int(5e6))
+    sampler.run(verbose=True,f_live=0.001,n_like_max=int(5e6),n_eff=10000)
     end = time.time()
     print('Sampling complete, time taken: {:.4f} s'.format(end-start))
     print('log Z: {:.4f}'.format(sampler.log_z))
