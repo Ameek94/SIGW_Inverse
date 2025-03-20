@@ -14,3 +14,4 @@ test*.ipynb
 chains*
 gaussian_shells.py
 model_files/
+*.h5

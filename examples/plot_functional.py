@@ -103,7 +103,7 @@ def interpolate(nodes, vals, x):
     return res
 
 # thinning the samples
-thinning = max(1,len(samples)//2048)
+thinning = max(1,len(samples)//1024)
 xs = samples[:, :free_nodes][::thinning]
 ys = samples[:, free_nodes:][::thinning]
 xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
@@ -141,7 +141,7 @@ for x in ax:
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
 plt.savefig(f'./nautilus_{model}_{num_nodes}_nodes.pdf',bbox_inches='tight')
-plt.show()
+# plt.show()
 
 # plot corner plot
 names = [f'x{i}' for i in range(free_nodes)] + [f'y{i}' for i in range(num_nodes)]
