@@ -73,5 +73,5 @@ ax.set_ylim(y_min, y_max)
 ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 0.5)
 y_mid = (ax.get_ylim()[0] + ax.get_ylim()[1]) / 2
 for x, y in zip(Num_nodes, logZ):
-    plt.text(x+0.2, y-22.5, f'({y:.2f})', fontsize=10, ha='center', va='bottom')
+    plt.text(x+0.05, y-20, f'({y:.2f})', fontsize=10, ha='center', va='bottom')
 plt.savefig(f'./{model}_logz.pdf',bbox_inches='tight')
