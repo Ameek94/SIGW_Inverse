@@ -21,3 +21,4 @@ NANOGrav15yr_KDE-FreeSpectra_v1.0.0/
 model_files/
 chains/
 ultranest_*/
+*.h5
