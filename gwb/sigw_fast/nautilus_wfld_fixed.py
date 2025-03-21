@@ -71,30 +71,18 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.):
     OmegaGW = norm * Integral
     return OmegaGW
 
-def prior(cube, free_nodes, left_node, right_node, w_min, w_max, log10_f_rh_min, log10_f_rh_max, y_min, y_max):
+def prior(cube, w_min, w_max, y_min, y_max):
     params = cube.copy()
     w = params[0]
     w = w * (w_max - w_min) + w_min
-    log10_f_rh = params[1]
-    log10_f_rh = log10_f_rh * (log10_f_rh_max - log10_f_rh_min) + log10_f_rh_min
-    x = params[2:free_nodes + 2]
-    N = len(x)
-    t = np.zeros(N)
-    t[N-1] = x[N-1]**(1. / N)
-    for n in range(N-2, -1, -1):
-        t[n] = x[n]**(1. / (n + 1)) * t[n + 1]
-    xs = t * (right_node - left_node) + left_node
-    ys = params[free_nodes + 2:]
+    ys = params[1:]
     ys = ys * (y_max - y_min) + y_min
-    return np.concatenate([[w], xs, ys])
-    # return np.concatenate([[w, log10_f_rh], xs, ys])
+    return np.concatenate([[w], ys])
 
-def likelihood(params, free_nodes, left_node, right_node, frequencies, Omegas, cov):
+def likelihood(params, log10_f_rh, nodes, frequencies, Omegas, cov):
     w = params[0]
-    log10_f_rh = params[1]
-    nodes = params[2:free_nodes + 2]
-    nodes = np.pad(nodes, (1, 1), 'constant', constant_values=(left_node, right_node))
-    vals = params[free_nodes + 1:]    
+    # log10_f_rh = params[1]
+    vals = params[1:]    
     omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd)
     diff = omegagw - Omegas
     return -0.5 * np.dot(diff, np.linalg.solve(cov, diff))
@@ -121,7 +109,7 @@ def resample_equal(samples, logl, logwt, rstate):
 
 def main():
     # Load the gwb data from file
-    data = np.load('./spectra_0p8.npz')
+    data = np.load('./spectra_0p8_interp.npz')
     frequencies = data['frequencies']
     gwb_model = str(sys.argv[1])
     Omegas = data[f'gw_{gwb_model}'] 
@@ -130,37 +118,36 @@ def main():
     cov = np.diag(omks_sigma**2)
 
     num_nodes = int(sys.argv[2])
-    free_nodes = num_nodes - 2
+    # free_nodes = num_nodes - 2
     fac = 5
     pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
+    nodes = np.linspace(left_node, right_node, num_nodes)
+    free_nodes = 0
     y_max = -2
     y_min = -6
 
     w_min = 0.01
     w_max = 0.99
-    log10_f_rh_min = -5.5
-    log10_f_rh_max = -4.5
+    log10_f_rh = -5.
 
     ndim = 1 + free_nodes + num_nodes
 
-    prior_transform = partial(prior, free_nodes=free_nodes, left_node=left_node, 
-                              right_node=right_node, w_min=w_min, w_max=w_max, 
-                              log10_f_rh_min=log10_f_rh_min, log10_f_rh_max=log10_f_rh_max, 
+    prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
                               y_min=y_min, y_max=y_max)
     
-    loglikelihood = partial(likelihood, free_nodes=free_nodes, left_node=left_node, right_node=right_node,
+    loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, nodes=nodes,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_wfld_{num_nodes}.h5')
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_wfld_fixed_{num_nodes}.h5')
 
-    sampler.run(verbose=True, f_live=0.005,n_like_max=int(5e6))
+    sampler.run(verbose=True, f_live=0.002,n_like_max=int(5e6))
     print('log Z: {:.2f}'.format(sampler.log_z))
 
     samples, logl, logwt = sampler.posterior()
 
-    np.savez(f'{gwb_model}_wfld_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z)
+    np.savez(f'{gwb_model}_wfld_fixed_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z)
     print("Nested sampling complete")
 
     print(f"Cached kernel was used {cache_counter} times")
@@ -173,10 +160,9 @@ def main():
 
     p_arr = np.geomspace(pk_min * 1.001, pk_max * 0.999, 100, endpoint=True)
     ws = samples[:, 0]
-    # log10_f_rhs = samples[:, 1]
-    xs = samples[:, 1:free_nodes + 1]
-    ys = samples[:, free_nodes + 1:]
-    thinning = len(samples) // 64
+    xs = nodes 
+    ys = samples[:, 1:]
+    thinning = len(samples) // 128
     cmap = matplotlib.colormaps['Reds']
     ys = ys[::thinning]
     xs = xs[::thinning]
@@ -194,8 +180,7 @@ def main():
 
     for i, y in enumerate(ys):
         w = ws[i]
-        log10_f_rh = -5. #log10_f_rhs[i]
-        x = np.pad(xs[i], (1, 1), 'constant', constant_values=(left_node, right_node))
+        x = nodes
         pz_amps, gwb_amps = get_pz_omega(w, log10_f_rh, x, y)
         ax1.loglog(p_arr, pz_amps, alpha=0.25, color=cmap(cols[i]))
         ax1.scatter(10**(x), 10**(ys[i]), s=16, alpha=0.5, color=cmap(cols[i]))
@@ -212,7 +197,7 @@ def main():
     ax2.set_ylabel(r'$\Omega_{\mathrm{GW}}(k)$')
     ax2.set_xlabel(r'$k$')
     fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=[ax1, ax2], label='Logprob')
-    plt.savefig(f"{gwb_model}_wfld_nautilus_sigwfast_{num_nodes}.pdf")
+    plt.savefig(f"{gwb_model}_wfld_nautilus_fixed_{num_nodes}.pdf")
 
 
 if __name__ == "__main__":

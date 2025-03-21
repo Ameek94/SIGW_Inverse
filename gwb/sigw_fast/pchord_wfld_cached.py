@@ -40,15 +40,19 @@ from collections import OrderedDict
 
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
+cache_counter = 0
 
 def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
+    global cache_counter
+
     # Round w to the desired tolerance (number of decimals)
     key = round(w, tolerance)
-    
     # If already cached, update the order and return
     if key in kernel_cache:
+        cache_counter += 1
         kernel_cache.move_to_end(key)
         return kernel_cache[key]
+
     
     # Otherwise compute the kernels
     b = sd.beta(w)
@@ -56,7 +60,7 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
     kernel2 = sd.kernel2_w(d2array, s2array, b)
     
     # If cache size is 4, remove the least recently used entry
-    if len(kernel_cache) >= 50:
+    if len(kernel_cache) >= 100:
         kernel_cache.popitem(last=False)
     
     # Store and return the result
@@ -149,7 +153,7 @@ settings.feedback = 2
 output = pypolychord.run_polychord(likelihood, nDims, nDerived, settings, prior, dumper)
 print("Nested sampling complete")
 
-del kernel_cache
+print(f"Cached kernel used {cache_counter} times")
 
 # #------------------------------------------------------------Plotting------------------------------------------------------------#
 # paramnames = [('x%i' % i, r'x_%i' % i) for i in range(free_nodes)]
