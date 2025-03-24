@@ -1,7 +1,9 @@
+import jax.numpy as jnp
+from jax import jit
 from functools import partial
 from interpax import CubicSpline
 from interpolation.base import Interpolator
-from utils import unit_untransform
+# from utils import unit_untransform
 import jax.numpy as jnp
 from jax import jit
 
