@@ -1,4 +1,4 @@
-from inference.base_inference import BaseInference
+from inference.base import BaseInference
 import tensorflow_probability.substrates.jax as tfp
 from jaxns import NestedSampler, TerminationCondition
 from jaxns import Model, Prior
@@ -11,7 +11,7 @@ class NS(BaseInference):
     """
 
     def __init__(self, model, model_args=None,
-                  sampler_kwarsgs=None, termination_kwargs = None,verbose=True):
+                  sampler_kwargs=None, termination_kwargs = None,verbose=True):
         """
         Initialize the NestedSampler inference object.
         
@@ -53,9 +53,11 @@ class NS(BaseInference):
         model_args = self.model_args.copy()
 
         def prior():
+            pass
 
 
         def loglikeihood(nodes, values, extra_params):
+            pass
             
 
         exact_ns = NestedSampler(model=model, max_samples=1e4,parameter_estimation=True,verbose=False,difficult_model=False)
@@ -63,4 +65,4 @@ class NS(BaseInference):
         termination_reason, state = exact_ns(random.PRNGKey(42),term_cond=TerminationCondition(dlogZ=0.2))
         results = exact_ns.to_results(termination_reason=termination_reason, state=state)
         exact_ns.summary(results)
-        return result
+        return results

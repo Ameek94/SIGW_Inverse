@@ -16,3 +16,4 @@ gaussian_shells.py
 model_files/
 *.h5
 *.so
+.venv

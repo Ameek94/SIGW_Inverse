@@ -1,9 +1,17 @@
 # base class for interpolation
 import jax.numpy as jnp
-from utils import unit_transform, unit_untransform
+# from utils import unit_untransform
 import numpyro
 from numpyro import distributions as dist
+from jax import jit
 
+@jit
+def unit_untransform(x,bounds):
+    """
+    Transform array to original domain given by bounds from [0,1]
+    """
+    xu = x*(bounds[1]-bounds[0]) + bounds[0]
+    return xu
 
 class Interpolator:
 
