@@ -15,7 +15,7 @@ matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 # Load data
-data = np.load('./spectra_0p8.npz')
+data = np.load('./spectra_0p8_interp.npz')
 frequencies = data['frequencies']
 gwb_model = str(sys.argv[1])
 Omegas = data[f'gw_{gwb_model}'] 
@@ -28,7 +28,7 @@ pk_min, pk_max = min(p_arr_data), max(p_arr_data)
 left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
 p_arr = np.logspace(left_node+0.001, right_node-0.001, 100)
-
+log10_f_rh = data['log10_f_rh'].item()
 
 
 blue = '#006FED'
@@ -98,10 +98,10 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='OmegaGW'):
-        w, log10_f_rh = sample[:2]
-        free_nodes = sample[2:num_nodes-2]
+        w = sample[:1] #, log10_f_rh = sample[:2]
+        free_nodes = sample[1:free_nodes+1]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-        vals = sample[num_nodes:]
+        vals = sample[free_nodes+1:]
         nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
         b = sd.beta(w)
         kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
@@ -183,6 +183,20 @@ for x in ax:
 plt.savefig(f'{gwb_model}_wfld_{num_nodes}_posterior.pdf',bbox_inches='tight')
 
 print(f"Cached kernel used {cache_counter} times")
+
+names = ['w']
+labels = ['w']
+bounds = [[0.01,0.99]]
+ranges = dict(zip(names,bounds))
+print(ranges)
+gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
+g = plots.get_subplot_plotter(subplot_size=3.5)
+blue = '#006FED'
+g.settings.title_limit_fontsize = 14
+g.settings.axes_fontsize=16
+g.settings.axes_labelsize=18
+g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=1)
+g.export(f'{gwb_model}_wfld_free_{num_nodes}_1D_w.pdf')
 
 # # getdist plots
 # names = ['w','log10_f_rh']

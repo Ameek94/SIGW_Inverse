@@ -15,7 +15,7 @@ matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 # Load data
-data = np.load('./spectra_0p8.npz')
+data = np.load('./spectra_0p8_interp.npz')
 frequencies = data['frequencies']
 gwb_model = str(sys.argv[1])
 Omegas = data[f'gw_{gwb_model}'] 
@@ -27,10 +27,11 @@ pz_amps = data[f'pk_{gwb_model}']
 pk_min, pk_max = min(p_arr_data), max(p_arr_data)
 left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
+num_nodes = int(sys.argv[2])
+print(np.linspace(left_node, right_node, num_nodes))
 p_arr = np.logspace(left_node+0.001, right_node-0.001, 100)
 log10_f_rh = data['log10_f_rh'].item()
 w = data['w'].item()
-
 
 blue = '#006FED'
 def plot_functional_posterior(funcs,samples,k_arr = [], intervals=[99.7, 95., 68.],
@@ -64,7 +65,7 @@ nd = 150
 from sigw_fast.sigwfast import sigwfast_mod as gw
 from sigw_fast.libraries import sdintegral_numba as sd
 
-num_nodes = int(sys.argv[2])
+
 
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
@@ -99,12 +100,13 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='OmegaGW'):
+        # print(sample)
         vv = sample[0]
         nodes = np.linspace(left_node, right_node, num_nodes)
         vals = sample[1:]
         nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(vv,frequencies,nd=nd)
         b = sd.beta(vv)
-        kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
+        kernel1, kernel2 = get_kernels(vv, d1array, s1array, d2array, s2array)
         nk = len(frequencies)
         Integral = np.empty_like(frequencies)
         Integral = gw.compute_w_k_array(nodes = nodes, vals = vals, nk = nk,komega = frequencies, 
@@ -115,7 +117,8 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
         two_b = 2*b
         norm = rd_norm * (frequencies)**(-2*b) *  (f_rh/fref)**(two_b)   
         OmegaGW.append(norm * Integral)
-    return np.array(OmegaGW) # OmegaGW has shape (nsamples, nk)
+    res = np.array(OmegaGW) # OmegaGW has shape (nsamples, nk)
+    return res
 
 def compute_pz(k,samples):
     Pz = []
@@ -158,11 +161,14 @@ normalized_weights = np.exp(logwt - log_total)
 equal_samples, _ = resample_equal(samples, logl, logwt, np.random.RandomState(0))
 
 # use 256 samples for plotting 
-thinning = max(1,len(equal_samples) // 512)
+thinning = max(1,len(equal_samples) // 256)
 
 # get 256 random samples from the posterior
 equal_samples = equal_samples[np.random.permutation(len(equal_samples))]
 equal_samples = equal_samples[::thinning]
+
+plt.plot((logl - logl.max())/(abs(logl.max())))
+plt.show()
 
 fig, ax  = plot_functional_posterior([compute_pz,compute_w],equal_samples
                                      ,k_arr = [p_arr,frequencies])

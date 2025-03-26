@@ -22,7 +22,7 @@ from scipy.interpolate import interp1d
 ### SIGWfast
 sys.path.append('./libraries/')
 try:
-    from sigw_fast.libraries import sdintegral_numba as sd
+    from libraries import sdintegral_numba as sd
 except ModuleNotFoundError:
     print("Numba not installed. Please install numba and numba-scipy to use the numba-scipy kernel (recommended for non-standard kernels). Using default scipy kernel.")
     from sigw_fast.libraries import sdintegral as sd
