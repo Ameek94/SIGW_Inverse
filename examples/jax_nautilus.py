@@ -88,10 +88,21 @@ def prior(cube):
     ys = ys * (y_maxs[None, :] - y_mins[None, :]) + y_mins[None, :]
     return np.concatenate([xs, ys], axis=1)
 
+
+# def linear_interpolate(nodes, vals, x):
+#     # Create a linear interpolation of log10(Pζ) and then convert back to linear scale.
+    
+
+#     res = jnp.where(x < left_node, 0, res)
+#     res = jnp.where(x > right_node, 0, res)
+#     return res
+
 def interpolate(nodes, vals, x):
     # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
-    spl = CubicSpline(nodes, vals, check=False)
-    res = jnp.power(10, spl(x))
+    # spl = CubicSpline(nodes, vals, check=False)
+    # Testing linear interpolation
+    # spl = lambda x: 
+    res = jnp.power(10, jnp.interp(x, nodes, vals))
     res = jnp.where(x < left_node, 0, res)
     res = jnp.where(x > right_node, 0, res)
     return res
@@ -112,7 +123,7 @@ def likelihood(params):
     nodes = jnp.pad(nodes, ((0, 0), (1, 1)), 'constant',
                       constant_values=((0, 0), (left_node, right_node)))
     vals = params[:, free_nodes:]
-    omegagw = split_vmap(get_gwb_func, (nodes, vals), batch_size=20)[0]
+    omegagw = split_vmap(get_gwb_func, (nodes, vals), batch_size=100)[0]
     diff = omegagw - Omegas
     sol = np.linalg.solve(cov, diff.T).T
     res = -0.5 * np.sum(diff * sol, axis=1)
@@ -204,25 +215,25 @@ def main():
     right_node = np.log10(pk_max)
 
     # Set the y range for the interpolation.
-    y_max = -2
-    y_min = -6
-    y_mins = np.array(num_nodes * [-6.])
-    y_maxs = np.array(num_nodes * [-1.])
+    y_max = -1.
+    y_min = -8.
+    y_mins = np.array(num_nodes * [y_min])
+    y_maxs = np.array(num_nodes * [y_max])
 
     # Set up the sampler.
     ndim = free_nodes + num_nodes
     sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
-                                            ,pool=(None,MPIPoolExecutor()),filepath=f'./nautilus_{model}_{num_nodes}_nodes.h5') 
+                                            ,pool=(None,4),filepath=f'./nautilus_{model}_{num_nodes}_linear_nodes.h5') 
 
     start = time.time()
-    sampler.run(verbose=True, f_live=0.01, n_like_max=1e7)#, n_eff=2000*ndim)
+    sampler.run(verbose=True, f_live=0.005, n_like_max=5e6)#, n_eff=2000*ndim)
     end = time.time()
     print('Time taken: {:.2f} s'.format(end - start))
     print('log Z: {:.2f}'.format(sampler.log_z))
 
     # Retrieve posterior samples.
     samples, logl, logwt = sampler.posterior()
-    np.savez(f'nautilus_{model}_{num_nodes}_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
+    np.savez(f'nautilus_{model}_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
     print(samples.shape)
     print(logl.shape)
     print(logwt.shape)

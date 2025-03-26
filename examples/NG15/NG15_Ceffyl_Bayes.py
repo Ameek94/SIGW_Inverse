@@ -1,5 +1,5 @@
 import sys,os
-os.environ['XLA_FLAGS'] = f"--xla_force_host_platform_device_count={int(sys.argv[2])}"
+# os.environ['XLA_FLAGS'] = f"--xla_force_host_platform_device_count={int(sys.argv[2])}"
 import numpy as np
 import matplotlib.pyplot as plt
 from ceffyl import Ceffyl
@@ -36,12 +36,15 @@ def prior1D(cube,free_nodes,left_node,right_node,y_min,y_max):
 from interpax import CubicSpline
 from functools import partial
 
-def interpolate(nodes,vals,x,left_node,right_node):
-    spl = CubicSpline(nodes,vals,check=False)
-    res = jnp.power(10,spl(x))
-    res = jnp.where(x<left_node, 0., res)
-    res = jnp.where(x>right_node, 0., res)
+def interpolate(nodes, vals, x,left_node,right_node):
+    # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
+    # spl = CubicSpline(nodes, vals, check=False)
+    # Testing linear interpolation
+    res = jnp.power(10, jnp.interp(x, nodes, vals))
+    res = jnp.where(x < left_node, 0, res)
+    res = jnp.where(x > right_node, 0, res)
     return res
+
 
 def get_gwb(gwb_calculator,frequencies,nodes,vals,left_node,right_node):
     pf = lambda k: interpolate(nodes=nodes,vals=vals,x=jnp.log10(k)
@@ -92,10 +95,10 @@ def main():
     free_nodes = num_nodes - 2
     left_node = -9.
     right_node = -7.5
-    frequencies = np.load(f'{data_dir}/freqs.npy')
-    frequencies = frequencies[:5]
+    freqs = np.load(f'{data_dir}/freqs.npy')
+    frequencies = freqs[:5]
     y_max = -1.
-    y_min = -5.
+    y_min = -6.
     s = jnp.linspace(0, 1, 15)  # First rescaled internal momentum
     t = jnp.logspace(-5,5, 200)  # Second rescaled internal momentum
     t_expanded = jnp.expand_dims(t, axis=-1)
@@ -142,16 +145,16 @@ def main():
     from nautilus import Sampler
     ndim = free_nodes + num_nodes
     sampler = Sampler(prior, loglike, ndim, pass_dict=False,vectorized=False
-                      ,filepath=f'samples_{num_nodes}.h5'
+                      ,filepath=f'samples_{num_nodes}_linear.h5'
                       ,pool=(None,MPIPoolExecutor()) )
     # print("Starting Sampling")
     start = time.time()
-    sampler.run(verbose=True,f_live=0.001,n_like_max=int(5e6),n_eff=10000)
+    sampler.run(verbose=True,f_live=0.002,n_like_max=int(5e6))
     end = time.time()
     print('Sampling complete, time taken: {:.4f} s'.format(end-start))
     print('log Z: {:.4f}'.format(sampler.log_z))
     samples, logl, logwt = sampler.posterior()
-    np.savez(f'samples_{num_nodes}.npz',samples=samples,logl=logl,logwt=logwt,logz=sampler.log_z)
+    np.savez(f'samples_{num_nodes}_linear.npz',samples=samples,logl=logl,logwt=logwt,logz=sampler.log_z)
 
 if __name__=='__main__':
     main()

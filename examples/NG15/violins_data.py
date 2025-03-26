@@ -26,12 +26,17 @@ from plot_utils import split_vmap, plot_functional_posterior, resample_equal
 # num_nodes = int(sys.argv[1])
 # free_nodes = num_nodes - 2
 # Load data files
-datadir = './NG15_Ceffyl/30f_fs{hd}_ceffyl/'
+npoints = 10
+datadir = './NG15_Ceffyl/30f_fs{cp}_ceffyl/'
 density = np.load(datadir + "density.npy").squeeze(axis=0)  # shape: (n_frequencies, n_grid_points)
+density = density[:npoints, :]
 log10rhogrid = np.load(datadir + "log10rhogrid.npy")  # grid for log10rho values
 freqs = np.load(datadir + "freqs.npy")  # GW frequencies
+freqs = freqs[:npoints]
 # Number of samples to draw from each KDE distribution
-n_samples = 100000
+n_samples = 1000000
+
+print(f"density shape: {density.shape}, log10rhogrid shape: {log10rhogrid.shape}, freqs shape: {freqs.shape}")
 
 # Prepare a list to store sampled data for each frequency
 data_list = []
@@ -53,7 +58,7 @@ for i in range(density.shape[0]):
 data_list = np.array(data_list)
 
 # convert to OmegaGW
-Tspan = 505861299.1401643 #15 * 365 * 24 * 3600
+Tspan = 505861299.1401643
 h = 0.672
 H_0 = h * 100 * nat.convert(nat.km * nat.s**-1 * nat.Mpc**-1, nat.GeV)  # Hubble constant (GeV)
 H_0_Hz = H_0 * nat.convert(nat.GeV, nat.Hz)

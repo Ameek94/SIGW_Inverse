@@ -6,6 +6,7 @@
 *.png
 *.pdf
 *.npz
+*.npy
 *.ipynb_checkpoints
 *.code-workspace
 test_kernels.py

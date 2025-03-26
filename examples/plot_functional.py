@@ -52,10 +52,8 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
             y_low, y_high = np.percentile(val, [50 - interval / 2, 50 + interval / 2], axis=0
                                           ,weights=weights,method='inverted_cdf')
             ax[i].fill_between(k_arr[i], y_low, y_high, color=interval_cols[j][0], alpha=interval_cols[j][1])
-        # ax[i].plot(k_arr[i], np.median(val, axis=0), color='#006FED', lw=2.5)
+        ax[i].plot(k_arr[i], np.median(val, axis=0), color='#006FED', lw=2.5)
         ax[i].set_ylabel(ylabels[i])
-    for x in ax:
-        x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     return fig, ax
 
 model = str(sys.argv[1])
@@ -88,7 +86,7 @@ y_min = -6.
 y_max = -2.
 
 # get the samples
-samples_data = np.load(f'./nautilus_{model}_{num_nodes}_nodes.npz')
+samples_data = np.load(f'./nautilus_{model}_{num_nodes}_linear_nodes.npz')
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
@@ -96,14 +94,17 @@ print(f"Logz: {logz}, max logl: {logl.max()}")
 
 def interpolate(nodes, vals, x):
     # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
-    spl = CubicSpline(nodes, vals, check=False)
+    # spl = CubicSpline(nodes, vals, check=False)
+    # Testing linear interpolation
+    spl = lambda x: jnp.interp(x, nodes, vals)
     res = jnp.power(10, spl(x))
     res = jnp.where(x < left_node, 0, res)
     res = jnp.where(x > right_node, 0, res)
     return res
 
 # thinning the samples
-thinning = max(1,len(samples)//1024)
+num_samples = int(sys.argv[3])
+thinning = max(1,len(samples)//num_samples)
 xs = samples[:, :free_nodes][::thinning]
 ys = samples[:, free_nodes:][::thinning]
 xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
@@ -138,31 +139,33 @@ ax[1].errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt='o', color='
 ax[1].legend()
 k_mpc_f_hz = 2*np.pi * 1.03 * 10**14
 for x in ax:
+    x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./nautilus_{model}_{num_nodes}_nodes.pdf',bbox_inches='tight')
+plt.savefig(f'./nautilus_{model}_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')
+
 # plt.show()
 
-# plot corner plot
-names = [f'x{i}' for i in range(free_nodes)] + [f'y{i}' for i in range(num_nodes)]
-labels = [f'x_{i}' for i in range(free_nodes)] + [f'y_{i}' for i in range(num_nodes)]
-ranges = {}
-logwt_total = logsumexp(logwt)
+# # plot corner plot
+# names = [f'x{i}' for i in range(free_nodes)] + [f'y{i}' for i in range(num_nodes)]
+# labels = [f'x_{i}' for i in range(free_nodes)] + [f'y_{i}' for i in range(num_nodes)]
+# ranges = {}
+# logwt_total = logsumexp(logwt)
 
-for i in range(free_nodes):
-    ranges[f'x{i}'] = (left_node,right_node)
-for i in range(num_nodes):
-    ranges[f'y{i}'] = (y_min,y_max)
-logwt = samples_data['logwt']
-logwt_total = logsumexp(logwt)
-weights = np.exp(logwt - logwt_total)
-weights = weights / weights.sum()
-gdsamples = MCSamples(samples=samples,names=names,labels=labels,ranges=ranges,weights=weights,loglikes=logl)
-# print(f"R-1 = {gdsamples.Conv()}")
-g = plots.get_subplot_plotter(subplot_size=2.5)
-g.settings.legend_fontsize = 14
-g.settings.axes_labelsize = 18
-g.settings.title_limit_fontsize = 14
-g.triangle_plot(gdsamples, filled=True, params=names,title_limit=1)
-g.export(f'./nautilus_{model}_{num_nodes}_nodes_corner.pdf')
+# for i in range(free_nodes):
+#     ranges[f'x{i}'] = (left_node,right_node)
+# for i in range(num_nodes):
+#     ranges[f'y{i}'] = (y_min,y_max)
+# logwt = samples_data['logwt']
+# logwt_total = logsumexp(logwt)
+# weights = np.exp(logwt - logwt_total)
+# weights = weights / weights.sum()
+# gdsamples = MCSamples(samples=samples,names=names,labels=labels,ranges=ranges,weights=weights,loglikes=logl)
+# # print(f"R-1 = {gdsamples.Conv()}")
+# g = plots.get_subplot_plotter(subplot_size=2.5)
+# g.settings.legend_fontsize = 14
+# g.settings.axes_labelsize = 18
+# g.settings.title_limit_fontsize = 14
+# g.triangle_plot(gdsamples, filled=True, params=names,title_limit=1)
+# g.export(f'./nautilus_{model}_{num_nodes}_linear_nodes_corner.pdf')
 # plt.show()
