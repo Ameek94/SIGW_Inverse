@@ -49,7 +49,9 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
                               ylabels=[r'$P_{\zeta}$', r'$\Omega_{\rm GW}$'],
                               aspect_ratio=(6, 5),
                               interval_cols=[('#006FED', 0.2), ('#006FED', 0.4), ('#006FED', 0.6)]):
-    # Plot the posterior of y = f(k|x) using symmetric credible intervals.
+    """
+    Plot the posterior of y = f(k|x) using symmetric credible intervals.
+    """
     nfuncs = len(vals)
     fig, ax = plt.subplots(1, nfuncs, figsize=(aspect_ratio[0] * nfuncs, aspect_ratio[1]), constrained_layout=True)
     if nfuncs == 1:
@@ -72,7 +74,7 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
 
 model = str(sys.argv[1])
 # Load the gravitational wave background data.
-data = np.load(f'./{model}_data.npz')
+data = np.load(f'./results/{model}_data.npz')
 frequencies = data['k']
 Omegas = data['gw']
 cov = data['cov']
@@ -100,7 +102,7 @@ y_min = -6.
 y_max = -2.
 
 # get the samples
-samples_data = np.load(f'./nautilus_{model}_{num_nodes}_linear_nodes.npz')
+samples_data = np.load(f'./results/nautilus_{model}_{num_nodes}_linear_nodes.npz')
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
@@ -156,30 +158,4 @@ for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./nautilus_{model}_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')
-
-# plt.show()
-
-# # plot corner plot
-# names = [f'x{i}' for i in range(free_nodes)] + [f'y{i}' for i in range(num_nodes)]
-# labels = [f'x_{i}' for i in range(free_nodes)] + [f'y_{i}' for i in range(num_nodes)]
-# ranges = {}
-# logwt_total = logsumexp(logwt)
-
-# for i in range(free_nodes):
-#     ranges[f'x{i}'] = (left_node,right_node)
-# for i in range(num_nodes):
-#     ranges[f'y{i}'] = (y_min,y_max)
-# logwt = samples_data['logwt']
-# logwt_total = logsumexp(logwt)
-# weights = np.exp(logwt - logwt_total)
-# weights = weights / weights.sum()
-# gdsamples = MCSamples(samples=samples,names=names,labels=labels,ranges=ranges,weights=weights,loglikes=logl)
-# # print(f"R-1 = {gdsamples.Conv()}")
-# g = plots.get_subplot_plotter(subplot_size=2.5)
-# g.settings.legend_fontsize = 14
-# g.settings.axes_labelsize = 18
-# g.settings.title_limit_fontsize = 14
-# g.triangle_plot(gdsamples, filled=True, params=names,title_limit=1)
-# g.export(f'./nautilus_{model}_{num_nodes}_linear_nodes_corner.pdf')
-# plt.show()
+plt.savefig(f'./results/nautilus_{model}_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')
