@@ -29,7 +29,7 @@ import re
 # ...existing code...
 
 # Check current working directory for files matching the pattern
-pattern = re.compile(rf'nautilus_{model}_(\d+)_nodes\.npz')
+pattern = re.compile(rf'nautilus_{model}_(\d+)_linear_nodes\.npz')
 
 # List all files in the current working directory
 files_in_dir = os.listdir(os.getcwd())
@@ -42,7 +42,7 @@ matching_files = [f for f in files_in_dir if pattern.match(f) and int(pattern.ma
 plt.figure(figsize=(6,4))
 plt.plot()
 plt.xlabel(r'Number of nodes')
-plt.ylabel(r'$\log Z$')
+plt.ylabel(r'$\log \mathcal{Z}$')
 # Get data from matching files
 Num_nodes = []
 logZ = []
@@ -73,5 +73,5 @@ ax.set_ylim(y_min, y_max)
 ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 0.5)
 y_mid = (ax.get_ylim()[0] + ax.get_ylim()[1]) / 2
 for x, y in zip(Num_nodes, logZ):
-    plt.text(x+0.05, y-20, f'({y:.2f})', fontsize=10, ha='center', va='bottom')
-plt.savefig(f'./{model}_logz.pdf',bbox_inches='tight')
+    plt.text(x+0.1, y-22.5, f'({y:.1f})', fontsize=10, ha='center', va='bottom')
+plt.savefig(f'./{model}_linear_logz.pdf',bbox_inches='tight')

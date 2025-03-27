@@ -32,6 +32,18 @@ def split_vmap(func,input_arrays,batch_size=32):
     results = tuple( jnp.concatenate([x[i] for x in res]) for i in range(nres))
     return results
 
+def weighted_median(data, weights):
+    """
+    Compute the weighted median of data.
+    """
+    # Sort the data and weights.
+    s_data, s_weights = map(np.array, zip(*sorted(zip(data, weights))))
+    # Compute the cumulative sum of the weights.
+    cdf = np.cumsum(s_weights)
+    # Find the median value.
+    idx = np.searchsorted(cdf, 0.5)
+    return s_data[idx]
+
 def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
                               weights = None,
                               ylabels=[r'$P_{\zeta}$', r'$\Omega_{\rm GW}$'],
@@ -52,7 +64,9 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
             y_low, y_high = np.percentile(val, [50 - interval / 2, 50 + interval / 2], axis=0
                                           ,weights=weights,method='inverted_cdf')
             ax[i].fill_between(k_arr[i], y_low, y_high, color=interval_cols[j][0], alpha=interval_cols[j][1])
-        ax[i].plot(k_arr[i], np.median(val, axis=0), color='#006FED', lw=2.5)
+        medians = np.apply_along_axis(weighted_median, 0, val, weights)
+        ax[i].plot(k_arr[i], medians, color='#006FED', lw=2.5)
+        # ax[i].plot(k_arr[i], np.median(val, axis=0), color='#006FED', lw=2.5)
         ax[i].set_ylabel(ylabels[i])
     return fig, ax
 

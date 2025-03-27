@@ -18,3 +18,4 @@ model_files/
 *.h5
 *.so
 .venv
+*.pkl

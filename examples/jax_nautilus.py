@@ -71,22 +71,23 @@ def prior_1D(cube):
     ys = ys * (y_max - y_min) + y_min
     return np.concatenate([xs, ys])
 
+@jit
 def prior(cube):
     """
     Transforms the input cube from [0,1] uniform parameters to the desired prior space.
     This vectorized version supports cube being either a 1D array of shape (nd,)
     or a 2D array of shape (Npoints, nd).
     """
-    cube = np.atleast_2d(cube.copy())
+    cube = jnp.atleast_2d(cube.copy())
     N = free_nodes  # Number of x parameters
     x = cube[:, :N]
-    exponents = 1.0 / np.arange(1, N + 1)
+    exponents = 1.0 / jnp.arange(1, N + 1)
     y_vals = x ** exponents  # shape (Npoints, free_nodes)
-    t_arr = np.cumprod(y_vals[:, ::-1], axis=1)[:, ::-1]
+    t_arr = jnp.cumprod(y_vals[:, ::-1], axis=1)[:, ::-1]
     xs = t_arr * (right_node - left_node) + left_node
     ys = cube[:, N:]
     ys = ys * (y_maxs[None, :] - y_mins[None, :]) + y_mins[None, :]
-    return np.concatenate([xs, ys], axis=1)
+    return jnp.concatenate([xs, ys], axis=1)
 
 
 # def linear_interpolate(nodes, vals, x):
@@ -127,8 +128,8 @@ def likelihood(params):
     diff = omegagw - Omegas
     sol = np.linalg.solve(cov, diff.T).T
     res = -0.5 * np.sum(diff * sol, axis=1)
-    res = jnp.where(jnp.isnan(res), -1e10, res)
-    res = jnp.where(res < -1e10, -1e10, res)
+    res = np.where(jnp.isnan(res), -1e10, res)
+    res = np.where(res < -1e10, -1e10, res)
     return res
 
 def resample_equal(samples, logl, logwt, rstate):
