@@ -275,6 +275,22 @@ def plot_grid():
         ax[i][0].set_ylabel(r'$P_{\zeta}$')
         ax[i][1].set_ylabel(r'$\log_{10} \Omega_{\rm GW}$')
 
+        ax2 = ax[i][1]
+        v1 = ax2.violinplot(list(OmegaGW_data), positions=np.log10(freqs), widths=0.05)
+        for pc in v1['bodies']:
+            pc.set_facecolor(('#E03424', 0.25))
+            # pc.set_facecolor(('blue',0.25))
+            pc.set_edgecolor(('#E03424',0.75))
+            pc.set_linestyle('solid')
+            # pc.set_alpha(0.8)
+            pc.set_linewidth(1.5)
+        v1['cmins'].set_color(('#E03424',0.5))
+        v1['cmaxes'].set_color(('#E03424',0.5))
+        v1['cbars'].set_color(('#E03424',0.5))
+        ax2.set_ylim(-12,-4)
+        # ax2.set_ylim(1e-12,1e-4)
+        ax2.set_xlim(-8.8, -7.5)# plt.show()
+
     k_mpc_f_hz = 2*np.pi * 1.03 * 10**14
     secax = ax[0,0].secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10)
