@@ -239,9 +239,9 @@ n_nodes = [2,3,4,5]
 
 def plot_grid():
     num_nodes = len(n_nodes)
-    fig, ax = plt.subplots(num_nodes , 2, figsize=(6*num_nodes,4.5),sharex='col',constrained_layout=True)
+    fig, ax = plt.subplots(num_nodes , 2, figsize=(12,4*num_nodes),sharex='col',constrained_layout=True)
     for i,n in enumerate(n_nodes):
-        run_data = np.load(f'ptarcade_{n_nodes}_linear.npz')
+        run_data = np.load(f'ptarcade_{num_nodes}_linear.npz')
         samples = run_data['samples']
         logl = run_data['logl']
         logwt = run_data['logwt']
@@ -251,13 +251,13 @@ def plot_grid():
         ys = resampled_samples[:,free_nodes:][::thinning]
         ys = resampled_samples[:,free_nodes:][::thinning]
         thinned_weights = np.ones(ys.shape[0])
-        print(f"shapes xs = {xs.shape}, ys = {ys.shape}, thinned_weights = {thinned_weights.shape}")
         ys = jnp.array(ys)
         if free_nodes>=1:
             xs = resampled_samples[:,:free_nodes][::thinning]
             xs = jnp.pad(xs, ((0,0),(1,1)), 'constant', constant_values=((0,0),(left_node, right_node)))
         else:
             xs = jnp.array([[left_node,right_node] for _ in range(len(ys))])
+        print(f"shapes xs = {xs.shape}, ys = {ys.shape}, thinned_weights = {thinned_weights.shape}")
 
         pz_amps,gwb_amps = split_vmap(get_pz_gwb,(xs,ys),batch_size=32)
 
@@ -272,18 +272,19 @@ def plot_grid():
 
         ax[i][1].set(xscale='linear',yscale='linear')
         ax[i][0].set(xscale='log',yscale='log')
+        ax[i][0].set_ylabel(r'$P_{\zeta}$')
+        ax[i][1].set_ylabel(r'$\log_{10} \Omega_{\rm GW}$')
+
     k_mpc_f_hz = 2*np.pi * 1.03 * 10**14
     secax = ax[0,0].secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10)
     ax[i][0].set_xlabel(r'$f\,{\rm [Hz]}$')
     ax[i][1].set_xlabel(r'$\log_{10} f\,{\rm [Hz]}$')
-    ax[i][0].set_ylabel(r'$P_{\zeta}$')
-    ax[i][1].set_ylabel(r'$\log_{10} \Omega_{\rm GW}$')
+    plt.savefig(f'NG15_recon_ptarcade_linear_nodes.pdf', bbox_inches='tight')
     plt.show()
 
 def main():
     plot_grid()
-    plt.savefig(f'NG15_recon_ptarcade_linear_nodes.pdf', bbox_inches='tight')
 
 if __name__ == "__main__":  
     main()
