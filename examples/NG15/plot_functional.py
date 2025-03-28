@@ -241,7 +241,8 @@ def plot_grid():
     num_nodes = len(n_nodes)
     fig, ax = plt.subplots(num_nodes , 2, figsize=(12,4*num_nodes),sharex='col',constrained_layout=True)
     for i,n in enumerate(n_nodes):
-        run_data = np.load(f'ptarcade_{num_nodes}_linear.npz')
+        free_nodes = n - 2
+        run_data = np.load(f'ptarcade_{n}_linear.npz')
         samples = run_data['samples']
         logl = run_data['logl']
         logwt = run_data['logwt']
@@ -252,7 +253,6 @@ def plot_grid():
         ys = resampled_samples[:,free_nodes:][::thinning]
         thinned_weights = np.ones(ys.shape[0])
         ys = jnp.array(ys)
-        free_nodes = n - 2
         if free_nodes>=1:
             xs = resampled_samples[:,:free_nodes][::thinning]
             xs = jnp.pad(xs, ((0,0),(1,1)), 'constant', constant_values=((0,0),(left_node, right_node)))
