@@ -797,15 +797,21 @@ class OmegaGWjax():
         # print(kvec.shape)
         
         # Setting s
-        if self.fixed_s:
-            s = self.s
-        else:
-            s = self.s(kvec, *params)
-        # Setting t
-        if self.fixed_t:
-            t = self.t
-        else:
-            t = self.t(kvec, *params)
+        # if self.fixed_s:
+        #     s = self.s
+        # else:
+        #     s = self.s(kvec, *params)
+        # # Setting t
+        # if self.fixed_t:
+        #     t = self.t
+        # else:
+        #     t = self.t(kvec, *params)
+        s = jnp.linspace(0, 1, 10)  # First rescaled internal momentum
+        t = jnp.logspace(-5,5, 200)  # Second rescaled internal momentum
+        # ## Expand t to add a new axis
+        t_expanded = jnp.expand_dims(t, axis=-1)
+        # Repeat t along the new axis to match the shape (Nt, Nf)
+        t = jnp.repeat(t_expanded, len(fvec), axis=-1)
 
         res = self.integration_routine(P_zeta, s, t, kvec, *params)
 

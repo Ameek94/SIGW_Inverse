@@ -26,8 +26,8 @@ from plot_utils import split_vmap, plot_functional_posterior, resample_equal
 # num_nodes = int(sys.argv[1])
 # free_nodes = num_nodes - 2
 # Load data files
-npoints = 10
-datadir = './NG15_Ceffyl/30f_fs{cp}_ceffyl/'
+npoints = 14
+datadir = './NG15_Ceffyl/30f_fs{hd}_ceffyl/'
 density = np.load(datadir + "density.npy").squeeze(axis=0)  # shape: (n_frequencies, n_grid_points)
 density = density[:npoints, :]
 log10rhogrid = np.load(datadir + "log10rhogrid.npy")  # grid for log10rho values
@@ -62,7 +62,7 @@ Tspan = 505861299.1401643
 h = 0.672
 H_0 = h * 100 * nat.convert(nat.km * nat.s**-1 * nat.Mpc**-1, nat.GeV)  # Hubble constant (GeV)
 H_0_Hz = H_0 * nat.convert(nat.GeV, nat.Hz)
-OmegaGW_data = (8 * np.pi**4 * freqs[:, None]**5 * h**2 * 10**(2 * data_list + np.log10(Tspan))) / (H_0_Hz**2)
+OmegaGW_data = (8 * np.pi**4 * freqs[:, None]**5 *  10**(2 * data_list + np.log10(Tspan))) / (H_0_Hz**2) # h**2 *
 OmegaGW_data = np.log10(OmegaGW_data)
 
 np.savez('./violins_data.npz', OmegaGW_data=OmegaGW_data, freqs=freqs)
