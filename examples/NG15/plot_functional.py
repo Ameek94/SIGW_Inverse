@@ -252,6 +252,7 @@ def plot_grid():
         ys = resampled_samples[:,free_nodes:][::thinning]
         thinned_weights = np.ones(ys.shape[0])
         ys = jnp.array(ys)
+        free_nodes = n - 2
         if free_nodes>=1:
             xs = resampled_samples[:,:free_nodes][::thinning]
             xs = jnp.pad(xs, ((0,0),(1,1)), 'constant', constant_values=((0,0),(left_node, right_node)))
