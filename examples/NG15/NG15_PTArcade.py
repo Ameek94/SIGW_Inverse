@@ -26,9 +26,10 @@ def prior1D(cube,free_nodes,left_node,right_node,y_min,y_max):
     ys = params[free_nodes:]
     ys = ys*(y_max - y_min) + y_min
     # if free_nodes>1:
+    #     x = params[:free_nodes]
+        # x = params[:,:free_nodes]
+        # Npoints = cube.shape[0]
     # x = params[:free_nodes]
-    #     # x = params[:,:free_nodes]
-    #     # Npoints = cube.shape[0]
     # N = free_nodes
     # t = np.zeros(N)
     # t[N-1] = x[N-1]**(1./N)
@@ -59,8 +60,8 @@ def main():
     free_nodes = num_nodes - 2
     left_node = -9.
     right_node = -7.
-    y_min = -10
-    y_max = -1
+    y_min = -8.
+    y_max = 0.
 
     inputs, input_options = get_user_args()
 
@@ -115,15 +116,15 @@ def main():
     # seed the random number generator
     start = time.time()
     rstate = np.random.default_rng(5647)
-    sampler = dynesty.NestedSampler(loglike, prior, ndim, nlive=1500,
-                               rstate=rstate)
-    sampler.run_nested(dlogz=0.01)
-    results = sampler.results
-    print(results.summary())
-    # sampler = Sampler(prior, loglike, ndim, pass_dict=False,vectorized=False
-    #                   ,filepath=f'ptarcade_{num_nodes}_linear.h5'
-    #                   ,pool=None )
-    # sampler.run(verbose=True,f_live=0.005,n_like_max=int(1e6))
+    # sampler = dynesty.NestedSampler(loglike, prior, ndim, nlive=1500,
+    #                            rstate=rstate)
+    # sampler.run_nested(dlogz=0.01)
+    # results = sampler.results
+    # print(results.summary())
+    sampler = Sampler(prior, loglike, ndim, pass_dict=False,vectorized=False
+                      ,filepath=f'ptarcade_{num_nodes}_linear.h5'
+                      ,pool=None )
+    sampler.run(verbose=True,f_live=0.005,n_like_max=int(1e6))
     end = time.time()
     print('Sampling complete, time taken: {:.4f} s'.format(end-start))
     print('log Z: {:.4f}'.format(sampler.log_z))

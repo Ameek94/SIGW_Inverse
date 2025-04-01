@@ -118,8 +118,8 @@ freqs = violin_data['freqs']
 frequencies = freqs
 left_node = -9.
 right_node = -7.
-y_max = -1.
-y_min = -6.
+y_max = 0.
+y_min = -8.
 s = jnp.linspace(0, 1, 15)  # First rescaled internal momentum
 t = jnp.logspace(-5,5, 200)  # Second rescaled internal momentum
 t_expanded = jnp.expand_dims(t, axis=-1)

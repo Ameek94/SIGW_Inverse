@@ -19,8 +19,8 @@ name = 'sigw_hd_'+str(num_nodes)+'_nodes'
 left_node = -9.
 right_node = -7.
 nodes = jnp.linspace(left_node,right_node,num_nodes)
-y_min = -10
-y_max = -1
+y_min = -8.
+y_max = 0.
 parameters = {'x%i' % i: prior("Uniform", left_node, right_node) for i in range(num_nodes-2)}
 parameters.update({'y%i' % i: prior("Uniform", y_min, y_max) for i in range(num_nodes)})
 
@@ -63,24 +63,20 @@ def get_gwb(frequencies,nodes,vals):
 
 gwb_func = jax.jit(get_gwb)
 
-def spectrum(f,y0,y1):
+def spectrum(f,y0,y1): # x0,
     """
     Spectrum for the frequency
     """
-    # xs = jnp.array([kwargs['x%i' % i].item() for i in range(num_nodes-2)])
-    # ys = jnp.array([kwargs['y%i' % i].item() for i in range(num_nodes)])
     # if isinstance(x0, np.ndarray):
     #     # print(f"len x0 = {len(x0)}")
-    #     x0 = x0.flatten()
     #     # print(f"shape x0 = {x0.shape}")
     #     # print(f'x0 = {x0}')
-    #     xs = jnp.array([left_node,x0.item(),x1.item(),x2.item(),x3.item(),right_node])
+    #     xs = jnp.array([left_node,x0.item(),right_node])
     # else:
-    #     xs = jnp.array([left_node,x0,x1,x2,x3,right_node])
+    #     xs = jnp.array([left_node,x0,right_node])
     # print(xs)
     xs = nodes
     ys = jnp.array([y0,y1])
-    # xs = jnp.pad(xs, (1,1), 'constant', constant_values=(left_node,right_node))
     # print(xs)
     xs = jnp.array(xs).flatten()
     ys = jnp.array(ys).flatten()

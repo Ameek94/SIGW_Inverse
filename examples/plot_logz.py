@@ -67,11 +67,11 @@ plt.plot(Num_nodes, logZ, '-.',color='k',alpha=0.9)
 plt.scatter(Num_nodes, logZ, color='k',marker='x',s=20)
 # Annotate each point with its logZ value
 ax = plt.gca()
-y_min = min(logZ) - 25
-y_max = max(logZ) + 25
+y_min = min(logZ) - 5
+y_max = max(logZ) + 5
 ax.set_ylim(y_min, y_max)
 ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 0.5)
 y_mid = (ax.get_ylim()[0] + ax.get_ylim()[1]) / 2
 for x, y in zip(Num_nodes, logZ):
-    plt.text(x+0.1, y-22.5, f'({y:.1f})', fontsize=10, ha='center', va='bottom')
-plt.savefig(f'./{model}_linear_logz.pdf',bbox_inches='tight')
+    plt.text(x+0.1, y-2, f'({y:.2f})', fontsize=12, ha='center', va='bottom')
+plt.savefig(f'./linear_logz_{model}.pdf',bbox_inches='tight')
