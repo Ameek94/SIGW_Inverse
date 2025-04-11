@@ -12,7 +12,7 @@ from matplotlib import cm, colors
 data = np.load('./bpl_data.npz')
 frequencies = data['k']
 
-w = 0.8
+w = 2/3
 log10_f_rh = -5.
 
 from sigw_fast.libraries import sdintegral_numba as sd
@@ -63,8 +63,8 @@ def peaked(p,pstar=9e-4,sigma=0.1,amp=1e-1,floor=1e-3):
 # plot spectra and corresponding OmegaGW
 
 # frequencies = np.geomspace(min(frequencies),max(frequencies),500)
-
-pk_min, pk_max = np.array(min(frequencies)/5), np.array(max(frequencies)*5)
+fac = 5.
+pk_min, pk_max = np.array(min(frequencies)/fac), np.array(max(frequencies)*fac)
 pk_arr = np.geomspace(pk_min, pk_max, 250)
 num_nodes = 150
 
@@ -76,7 +76,7 @@ omgw_osc = compute_w(w,log10_f_rh,osc,num_nodes,pk_arr,frequencies,nd=200)
 # omgw_peaked = compute(peaked,frequencies,nd = 500,w=w,f_rh=f_rh,Use_Cpp=False)
 # omgw_osc = compute(osc,frequencies,nd = 500,w=w,f_rh=f_rh,Use_Cpp=False)
 
-np.savez(f'spectra_0p8_interp.npz'
+np.savez(f'spectra_0p66_interp.npz'
          ,frequencies=frequencies,gw_bpl=omgw_bpl,gw_peaked=omgw_peaked,
          gw_osc=omgw_osc, pk_arr=pk_arr, pk_bpl = bpl(pk_arr),
          pk_peaked = peaked(pk_arr), pk_osc = osc(pk_arr), w=w, log10_f_rh=log10_f_rh)
@@ -106,5 +106,5 @@ ax[0].set_xlabel(r'f [Hz]')
 ax[0].set_ylabel(r'$P(f)$')
 
 ax[1].legend()
-plt.savefig('spectra_0p8.pdf',bbox_inches='tight')
+plt.savefig('spectra_0p66.pdf',bbox_inches='tight')
 plt.show()

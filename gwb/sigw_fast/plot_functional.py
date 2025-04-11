@@ -15,7 +15,7 @@ matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 # Load data
-data = np.load('./spectra_0p8_interp.npz')
+data = np.load('./spectra_0p66_interp.npz')
 frequencies = data['frequencies']
 gwb_model = str(sys.argv[1])
 Omegas = data[f'gw_{gwb_model}'] 
@@ -29,7 +29,8 @@ left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
 p_arr = np.logspace(left_node+0.001, right_node-0.001, 100)
 log10_f_rh = data['log10_f_rh'].item()
-
+num_nodes = int(sys.argv[2])
+w = data['w'].item()
 
 blue = '#006FED'
 def plot_functional_posterior(funcs,samples,k_arr = [], intervals=[99.7, 95., 68.],
@@ -63,7 +64,6 @@ nd = 150
 from sigw_fast.sigwfast import sigwfast_mod as gw
 from sigw_fast.libraries import sdintegral_numba as sd
 
-num_nodes = int(sys.argv[2])
 
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
@@ -98,10 +98,10 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='OmegaGW'):
-        w = sample[:1] #, log10_f_rh = sample[:2]
-        free_nodes = sample[1:free_nodes+1]
+        w = sample[0] #[:1] #, log10_f_rh = sample[:2]
+        free_nodes = sample[1:num_nodes-1]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-        vals = sample[free_nodes+1:]
+        vals = sample[num_nodes-1:]
         nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
         b = sd.beta(w)
         kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
@@ -123,9 +123,9 @@ def compute_pz(k,samples):
     Pz = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='Pz'):
-        free_nodes = sample[2:num_nodes-2]
+        free_nodes = sample[1:num_nodes-1]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-        vals = sample[num_nodes:]
+        vals = sample[num_nodes-1:]
         res = gw.power_spectrum_k_array(nodes, vals, k)
         Pz.append(res)
     return np.array(Pz) # Pz has shape (nsamples, nk)
@@ -150,7 +150,7 @@ def resample_equal(samples, logl, logwt, rstate):
     resampled_logl = logl[idx][perm]
     return resampled_samples, resampled_logl
 
-sample_data = np.load(f'{gwb_model}_wfld_{num_nodes}.npz')
+sample_data = np.load(f'{gwb_model}_wfld_free_{num_nodes}.npz')
 samples = sample_data['samples']
 logwt = sample_data['logwt']
 logl = sample_data['logl']
@@ -158,7 +158,9 @@ from scipy.special import logsumexp
 log_total = logsumexp(logwt)
 # Subtract the normalization constant and exponentiate to obtain normalized weights
 normalized_weights = np.exp(logwt - log_total)
-equal_samples, _ = resample_equal(samples, logl, logwt, np.random.RandomState(0))
+equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.RandomState(0))
+
+print(f'max logl: {max(equal_logl)}, min logl: {min(equal_logl)}')
 
 # use 256 samples for plotting 
 thinning = max(1,len(equal_samples) // 512)
@@ -199,19 +201,19 @@ g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limi
 g.export(f'{gwb_model}_wfld_free_{num_nodes}_1D_w.pdf')
 
 # # getdist plots
-# names = ['w','log10_f_rh']
-# labels = ['w','\\log_{10} f_{rh}']
-# names+= [f'x_{i}' for i in range(num_nodes-2)]
-# labels+= [f'x_{i}' for i in range(num_nodes-2)]
-# names+= [f'y_{i}' for i in range(num_nodes)]
-# labels+= [f'y_{i}' for i in range(num_nodes)]
-# bounds = [[0.6,0.9],[-5.5,-4.5]]
-# bounds+= [[left_node, right_node] for i in range(num_nodes-2)]
-# bounds+=[[-6,-2] for i in range(num_nodes)]
-# ranges = dict(zip(names,bounds))
-# print(ranges)
-# gd_sample = MCSamples(samples=samples, names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
-# g = plots.get_subplot_plotter(subplot_size=2.5)
-# markers = {'w': 0.8, 'log10_f_rh': -5.0}
-# g.triangle_plot(gd_sample,filled=True,markers=markers,title_limit=1)
-# g.export(f'{gwb_model}_wfld_{num_nodes}_triangle.pdf')
+names = ['w']
+labels = ['w']
+names+= [f'x_{i}' for i in range(num_nodes-2)]
+labels+= [f'x_{i}' for i in range(num_nodes-2)]
+names+= [f'y_{i}' for i in range(num_nodes)]
+labels+= [f'y_{i}' for i in range(num_nodes)]
+bounds = [[0.01,0.99]]
+bounds+= [[left_node, right_node] for i in range(num_nodes-2)]
+bounds+=[[-6,-2] for i in range(num_nodes)]
+ranges = dict(zip(names,bounds))
+print(ranges)
+gd_sample = MCSamples(samples=samples, names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
+g = plots.get_subplot_plotter(subplot_size=2.5)
+markers = {'w': 0.8}
+g.triangle_plot(gd_sample,filled=True,markers=markers,title_limit=1)
+g.export(f'{gwb_model}_wfld_{num_nodes}_triangle.pdf')

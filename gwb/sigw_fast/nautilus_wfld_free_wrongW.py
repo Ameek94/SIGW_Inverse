@@ -42,7 +42,7 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
     kernel2 = sd.kernel2_w(d2array, s2array, b)
     
     # If cache size is 4, remove the least recently used entry
-    if len(kernel_cache) >= 200:
+    if len(kernel_cache) >= 100:
         kernel_cache.popitem(last=False)
     
     # Store and return the result
@@ -67,20 +67,17 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.):
     OmegaGW = norm * Integral
     return OmegaGW
 
-def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
+def prior(cube, free_nodes, left_node,right_node, y_min, y_max):
     params = cube.copy()
-    w = params[0]
-    w = w * (w_max - w_min) + w_min
-    xs = params[1:free_nodes+1]
+    xs = params[0:free_nodes+1]
     xs = xs * (right_node - left_node) + left_node
     ys = params[free_nodes+1:]
     ys = ys * (y_max - y_min) + y_min
-    return np.concatenate([[w],xs, ys])
+    return np.concatenate([xs, ys])
 
-def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
-    w = params[0]
+def likelihood(params,w, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
     # log10_f_rh = params[1]
-    nodes = params[1:free_nodes+1]
+    nodes = params[0:free_nodes+1]
     nodes = np.pad(nodes, (1,1), 'constant', constant_values=(left_node, right_node))
     vals = params[free_nodes+1:]    
     omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd)
@@ -109,7 +106,7 @@ def resample_equal(samples, logl, logwt, rstate):
 
 def main():
     # Load the gwb data from file
-    data = np.load('./spectra_0p66_interp.npz')
+    data = np.load('./spectra_0p8_interp.npz')
     frequencies = data['frequencies']
     gwb_model = str(sys.argv[1])
     Omegas = data[f'gw_{gwb_model}'] 
@@ -119,37 +116,37 @@ def main():
 
     num_nodes = int(sys.argv[2])
     free_nodes = num_nodes - 2
-    pk_arr = data['pk_arr']
-    pk_min, pk_max = min(pk_arr), max(pk_arr)
-    # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
+    fac = 5
+    pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = 0.
-    y_min = -6.
+    y_max = -2
+    y_min = -6
 
-    w_min = 0.1
-    w_max = 0.9
+    w_min = 0.01
+    w_max = 0.99
     log10_f_rh = -5.
+    w = 0.8
 
-    ndim = 1 + free_nodes + num_nodes
+    ndim = free_nodes + num_nodes
 
-    prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
+    prior_transform = partial(prior,
                               free_nodes=free_nodes,
                               left_node=left_node, right_node=right_node,
                               y_min=y_min, y_max=y_max)
     
-    loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, 
+    loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh,w=w,
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,4))
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_wfld_free_{num_nodes}_RD.h5',pool=(None,4))
 
-    sampler.run(verbose=True, f_live=0.005,n_like_max=int(2e6))
+    sampler.run(verbose=True, f_live=0.01,n_like_max=int(1e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
 
     samples, logl, logwt = sampler.posterior()
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_w0p66_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z)
+    np.savez(f'{gwb_model}_wfld_free_{num_nodes}_RD.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

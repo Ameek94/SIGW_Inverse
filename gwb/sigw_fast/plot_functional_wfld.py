@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from getdist import plots, MCSamples, loadMCSamples
 import sys
+sys.path.append('../')
+import tqdm
+
 # Set matplotlib parameters
 font = {'size': 16, 'family': 'serif'}
 axislabelfontsize = 'large'
@@ -60,7 +63,7 @@ num_nodes = int(sys.argv[2])
 
 def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
-    for sample in samples:
+    for sample in tqdm.tqdm(samples,desc='OmegaGW'):
         w, log10_f_rh = sample[:2]
         free_nodes = sample[2:num_nodes-2]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
@@ -83,7 +86,7 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
 
 def compute_pz(k,samples):
     Pz = []
-    for sample in samples:
+    for sample in tqdm.tqdm(samples,desc='Pz'):
         free_nodes = sample[2:num_nodes-2]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
         vals = sample[num_nodes:]
@@ -111,7 +114,7 @@ def resample_equal(samples, logl, logwt, rstate):
     resampled_logl = logl[idx][perm]
     return resampled_samples, resampled_logl
 
-sample_data = np.load(f'{gwb_model}_wfld_{num_nodes}.npz')
+sample_data = np.load(f'{gwb_model}_wfld_free_{num_nodes}.npz')
 samples = sample_data['samples']
 logwt = sample_data['logwt']
 logl = sample_data['logl']
@@ -122,7 +125,7 @@ normalized_weights = np.exp(logwt - log_total)
 equal_samples, _ = resample_equal(samples, logl, logwt, np.random.RandomState(0))
 
 # use 256 samples for plotting 
-thinning = max(1,len(equal_samples) // 256)
+thinning = max(1,len(equal_samples) // 512)
 equal_samples = equal_samples[::thinning]
 
 fig, ax  = plot_functional_posterior([compute_pz,compute_w],equal_samples
