@@ -19,6 +19,11 @@ matplotlib.rc('font', **font)
 matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
+def renormalise_log_weights(log_weights):
+    log_total = logsumexp(log_weights)
+    normalized_weights = np.exp(log_weights - log_total)
+    return normalized_weights
+
 def split_vmap(func,input_arrays,batch_size=32):
     """
     Utility to split vmap over a function taking multiple arrays as input into multiple chunks, useful for reducing memory usage.
@@ -74,7 +79,7 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
 
 model = str(sys.argv[1])
 # Load the gravitational wave background data.
-data = np.load(f'./results/{model}_data.npz')
+data = np.load(f'./{model}_data.npz')
 frequencies = data['k']
 Omegas = data['gw']
 cov = data['cov']
@@ -102,7 +107,7 @@ y_min = -6.
 y_max = -2.
 
 # get the samples
-samples_data = np.load(f'./results/nautilus_{model}_{num_nodes}_linear_nodes.npz')
+samples_data = np.load(f'./nautilus_{model}_{num_nodes}_linear_nodes.npz')
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
