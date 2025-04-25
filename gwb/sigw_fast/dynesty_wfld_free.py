@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from nautilus import Sampler
 import math
+from scipy.special import logsumexp
+from dynesty import DynamicNestedSampler
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -72,12 +74,7 @@ def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
     w = params[0]
     w = w * (w_max - w_min) + w_min
     xs = params[1:free_nodes+1]
-    N = len(xs)
-    t = np.zeros(N)
-    t[N-1] = xs[N-1]**(1./N)
-    for n in range(N-2, -1, -1):
-        t[n] = xs[n]**(1./(n+1)) * t[n+1]
-    xs = t*(right_node - left_node) + left_node
+    xs = xs * (right_node - left_node) + left_node
     ys = params[free_nodes+1:]
     ys = ys * (y_max - y_min) + y_min
     return np.concatenate([[w],xs, ys])
@@ -91,6 +88,12 @@ def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies,
     omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd)
     diff = omegagw - Omegas
     return -0.5 * np.dot(diff, np.linalg.solve(cov, diff)), omegagw
+
+
+def renormalise_log_weights(log_weights):
+    log_total = logsumexp(log_weights)
+    normalized_weights = np.exp(log_weights - log_total)
+    return normalized_weights
 
 def resample_equal(samples, logl, logwt, rstate):
     wt = np.exp(logwt)
@@ -132,7 +135,7 @@ def main():
     y_max = 0.
     y_min = -8.
 
-    w_min = 0.1
+    w_min = 0.33
     w_max = 0.99
     log10_f_rh = -5.
 
@@ -147,14 +150,24 @@ def main():
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,8))
+    # sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,4))
+    sampler = DynamicNestedSampler(loglikelihood,prior_transform,ndim=ndim,
+                                       sample='rwalk',blob=True) #(likelihood, prior, ndim, nlive=nlive, sample='rslice')
+    sampler.run_nested(dlogz_init=0.05, print_progress=True,maxcall=int(2e6),checkpoint_file='{gwb_model}_w0p66_free_dynesty_{num_nodes}.save')
 
-    sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
-    print('log Z: {:.4f}'.format(sampler.log_z))
+    res = sampler.results  # type: ignore # grab our results
+    mean = res['logz'][-1]
+    logz_err = res['logzerr'][-1]
 
-    samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
+    print(f"Mean logz: {mean:.4f} +/- {logz_err:.4f}")
+    # sampler.run(verbose=True, f_live=0.001,n_like_max=int(2e6),max)
+    # print('log Z: {:.4f}'.format(sampler.log_z))
+    samples = res['samples']
+    logwt = res['logwt']
+    logl = res['logl']
+    omegagw = res['blob']
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_w0p66_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+    np.savez(f'{gwb_model}_w0p66_free_dynesty_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=mean,omegagw=omegagw)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

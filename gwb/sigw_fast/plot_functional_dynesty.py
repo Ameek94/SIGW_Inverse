@@ -27,10 +27,9 @@ pz_amps = data[f'pk_{gwb_model}']
 pk_min, pk_max = min(p_arr_data), max(p_arr_data)
 left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
-num_nodes = int(sys.argv[2])
-print(np.linspace(left_node, right_node, num_nodes))
 p_arr = np.logspace(left_node+0.001, right_node-0.001, 100)
 log10_f_rh = data['log10_f_rh'].item()
+num_nodes = int(sys.argv[2])
 w = data['w'].item()
 
 blue = '#006FED'
@@ -66,7 +65,6 @@ from sigw_fast.sigwfast import sigwfast_mod as gw
 from sigw_fast.libraries import sdintegral_numba as sd
 
 
-
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
 cache_counter = 0
@@ -100,13 +98,15 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='OmegaGW'):
-        # print(sample)
-        vv = sample[0]
-        nodes = np.linspace(left_node, right_node, num_nodes)
-        vals = sample[1:]
-        nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(vv,frequencies,nd=nd)
-        b = sd.beta(vv)
-        kernel1, kernel2 = get_kernels(vv, d1array, s1array, d2array, s2array)
+        w = sample[0] #[:1] #, log10_f_rh = sample[:2]
+        free_nodes = sample[1:num_nodes-1]
+        nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
+        vals = sample[num_nodes-1:]
+        nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
+        b = sd.beta(w)
+        kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
+        # kernel1 = sd.kernel1_w(d1array, s1array, b)
+        # kernel2 = sd.kernel2_w(d2array, s2array, b)
         nk = len(frequencies)
         Integral = np.empty_like(frequencies)
         Integral = gw.compute_w_k_array(nodes = nodes, vals = vals, nk = nk,komega = frequencies, 
@@ -117,15 +117,15 @@ def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
         two_b = 2*b
         norm = rd_norm * (frequencies)**(-2*b) *  (f_rh/fref)**(two_b)   
         OmegaGW.append(norm * Integral)
-    res = np.array(OmegaGW) # OmegaGW has shape (nsamples, nk)
-    return res
+    return np.array(OmegaGW) # OmegaGW has shape (nsamples, nk)
 
 def compute_pz(k,samples):
     Pz = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='Pz'):
-        nodes = np.linspace(left_node, right_node, num_nodes)
-        vals = sample[1:]
+        free_nodes = sample[1:num_nodes-1]
+        nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
+        vals = sample[num_nodes-1:]
         res = gw.power_spectrum_k_array(nodes, vals, k)
         Pz.append(res)
     return np.array(Pz) # Pz has shape (nsamples, nk)
@@ -150,7 +150,7 @@ def resample_equal(samples, logl, logwt, rstate):
     resampled_logl = logl[idx][perm]
     return resampled_samples, resampled_logl
 
-sample_data = np.load(f'{gwb_model}_wfld_fixed_0p66_{num_nodes}.npz')
+sample_data = np.load(f'{gwb_model}_w0p66_free_dynesty_{num_nodes}.npz') #np.load(f'{gwb_model}_wfld_free_{num_nodes}.npz')
 samples = sample_data['samples']
 logwt = sample_data['logwt']
 logl = sample_data['logl']
@@ -158,17 +158,16 @@ from scipy.special import logsumexp
 log_total = logsumexp(logwt)
 # Subtract the normalization constant and exponentiate to obtain normalized weights
 normalized_weights = np.exp(logwt - log_total)
-equal_samples, _ = resample_equal(samples, logl, logwt, np.random.RandomState(0))
+equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.RandomState(0))
 
-# use samples for plotting 
+print(f'max logl: {max(equal_logl)}, min logl: {min(equal_logl)}')
+
+# use 256 samples for plotting 
 thinning = max(1,len(equal_samples) // 512)
 
-# get random samples from the posterior
+# get 256 random samples from the posterior
 equal_samples_plot = equal_samples[np.random.permutation(len(equal_samples))]
 equal_samples_plot = equal_samples[::thinning]
-
-# plt.plot((logl - logl.max())/(abs(logl.max())))
-# plt.show()
 
 fig, ax  = plot_functional_posterior([compute_pz,compute_w],equal_samples_plot
                                      ,k_arr = [p_arr,frequencies])
@@ -183,22 +182,41 @@ for x in ax:
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
 
-plt.savefig(f'{gwb_model}_wfld_fixed_0p66_{num_nodes}_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'{gwb_model}_wfld_0p66_dynesty_{num_nodes}_posterior.pdf',bbox_inches='tight')
 
 print(f"Cached kernel used {cache_counter} times")
 
-# 1D plot for w 
-
 names = ['w']
 labels = ['w']
-bounds = [[0.01,0.99]]
+bounds = [[0.33,0.99]]
 ranges = dict(zip(names,bounds))
 print(ranges)
-gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
+# gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
+gd_samples = MCSamples(samples=equal_samples[:,0], names=names, labels=labels,ranges=ranges,)
 g = plots.get_subplot_plotter(subplot_size=3.5)
 blue = '#006FED'
 g.settings.title_limit_fontsize = 14
 g.settings.axes_fontsize=16
 g.settings.axes_labelsize=18
-g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=1)
-g.export(f'{gwb_model}_wfld_fixed_0p66_{num_nodes}_1D_w.pdf')
+g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=2)
+g.export(f'{gwb_model}_wfld_0p66_dynesty_{num_nodes}_1D_w.pdf')
+
+print(gd_samples.getMargeStats())
+
+# # getdist plots
+# names = ['w']
+# labels = ['w']
+# names+= [f'x_{i}' for i in range(num_nodes-2)]
+# labels+= [f'x_{i}' for i in range(num_nodes-2)]
+# names+= [f'y_{i}' for i in range(num_nodes)]
+# labels+= [f'y_{i}' for i in range(num_nodes)]
+# bounds = [[0.01,0.99]]
+# bounds+= [[left_node, right_node] for i in range(num_nodes-2)]
+# bounds+=[[-6,-2] for i in range(num_nodes)]
+# ranges = dict(zip(names,bounds))
+# print(ranges)
+# gd_sample = MCSamples(samples=samples, names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
+# g = plots.get_subplot_plotter(subplot_size=2.5)
+# markers = {'w': 0.8}
+# g.triangle_plot(gd_sample,filled=True,markers=markers,title_limit=1)
+# g.export(f'{gwb_model}_wfld_{num_nodes}_triangle.pdf')
