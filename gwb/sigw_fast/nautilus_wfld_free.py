@@ -133,7 +133,7 @@ def main():
     y_min = -8.
 
     w_min = 0.1
-    w_max = 0.99
+    w_max = 0.9
     log10_f_rh = -5.
 
     ndim = 1 + free_nodes + num_nodes
@@ -147,7 +147,8 @@ def main():
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,8))
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
+                      filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,8))
 
     sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
     print('log Z: {:.4f}'.format(sampler.log_z))

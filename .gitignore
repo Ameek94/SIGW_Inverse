@@ -25,3 +25,5 @@ ultranest_*/
 *.so
 *.venv
 *.save
+examples/.DS_Store
+examples/results/.DS_Store
