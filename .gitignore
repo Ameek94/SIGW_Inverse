@@ -19,3 +19,4 @@ model_files/
 *.so
 .venv
 *.pkl
+*.log

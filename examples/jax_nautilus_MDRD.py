@@ -22,7 +22,7 @@ from mpi4py.futures import MPIPoolExecutor
 font = {'size': 16, 'family': 'serif'}
 axislabelfontsize = 'large'
 matplotlib.rc('font', **font)
-# matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 # Global variables (will be set in main)
@@ -39,6 +39,7 @@ Omegas = None
 cov = None
 p_arr = None
 pz_amp = None
+params_MDRD = None
 
 #############################
 # Intermediate Functions
@@ -108,20 +109,27 @@ def interpolate(nodes, vals, x):
     res = jnp.where(x > right_node, 0, res)
     return res
 
-k_max = 10**(-2) # Wavenumber at transition to RD
-eta_R = 20/k_max # Conformal time at the end of RD
-params = [k_max, eta_R]
+# k_max = 8e-3
+# eta_R = 20/k_max
+# params_MDRD = [k_max, eta_R]
 
 # def get_gwb(nodes, vals):
 #     # Given nodes and values, create a function for Pζ and compute Ω_GW.
-#     pf = lambda k, *args: interpolate(nodes, vals, jnp.log10(k))
-#     omegagw = gwb_calculator(pf, frequencies, *params)
+#     pf = lambda k,  *args: interpolate(nodes, vals, jnp.log10(k))
+#     omegagw = gwb_calculator(pf, frequencies, *params_MDRD)
+#     # for comparison with RD:
+#     # pf = lambda k: interpolate(nodes, vals, jnp.log10(k))
+#     # omegagw = gwb_calculator(pf, frequencies)
 #     return (omegagw,)
-def get_gwb(nodes, vals): # for RD comparison
-    # Given nodes and values, create a function for Pζ and compute Ω_GW.
-    pf = lambda k: interpolate(nodes, vals, jnp.log10(k))
-    omegagw = gwb_calculator(pf, frequencies)
+
+def get_gwb(nodes, vals):
+    pf = lambda k, *args: interpolate(nodes, vals, jnp.log10(k))
+    if params_MDRD is not None:
+        omegagw = gwb_calculator(pf, frequencies, *params_MDRD)
+    else:
+        omegagw = gwb_calculator(pf, frequencies)
     return (omegagw,)
+
 
 # JIT compile get_gwb for speed.
 get_gwb_func = jit(get_gwb)
@@ -187,15 +195,22 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
 #     # Given nodes and vals, compute Pζ and Ω_GW.
 #     pf = lambda k, *args: interpolate(nodes, vals, jnp.log10(k))
 #     pz_amps = pf(p_arr)
-#     gwb_res = gwb_calculator(pf, frequencies, *params)
+#     gwb_res = gwb_calculator(pf, frequencies, *params_MDRD)
+#     # for comparison with RD:
+#     # pf = lambda k: interpolate(nodes, vals, jnp.log10(k))
+#     # pz_amps = pf(p_arr)
+#     # gwb_res = gwb_calculator(pf, frequencies)
 #     return (pz_amps, gwb_res)
 
-def get_pz_omega(nodes, vals): # for RD comparison
-    # Given nodes and vals, compute Pζ and Ω_GW.
-    pf = lambda k: interpolate(nodes, vals, jnp.log10(k))
-    pz_amps = pf(p_arr)
-    gwb_res = gwb_calculator(pf, frequencies)
+def get_pz_omega(nodes, vals):
+    pf = lambda k, *args: interpolate(nodes, vals, jnp.log10(k))
+    pz_amps = pf(p_arr_local)
+    if params_MDRD is not None:
+        gwb_res = gwb_calculator(pf, frequencies, *params_MDRD)
+    else:
+        gwb_res = gwb_calculator(pf, frequencies)
     return (pz_amps, gwb_res)
+
 
 #############################
 # Main function: Sampling and Postprocessing
@@ -203,11 +218,12 @@ def get_pz_omega(nodes, vals): # for RD comparison
 
 def main():
     global free_nodes, left_node, right_node, y_min, y_max, y_mins, y_maxs
-    global gwb_calculator, frequencies, Omegas, cov, p_arr, pz_amp
+    global gwb_calculator, frequencies, Omegas, cov, p_arr, pz_amp, get_gwb_func, params_MDRD
 
     model = str(sys.argv[1])
     # Load the gravitational wave background data.
     data = np.load(f'./results/{model}_MDRD_data.npz')
+    # data = np.load(f'./results/{model}_RDvsMDRD_data.npz')
     frequencies = data['k']
     Omegas = data['gw']
     cov = data['cov']
@@ -221,7 +237,19 @@ def main():
     t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
 
     # Create the gravitational wave background calculator.
-    gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD",kernel="RD", jit=True)
+    if '_RD' in model:
+        params_MDRD = None
+        gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="RD", jit=True)
+    else:
+        k_max = 6e-3
+        eta_R = 20 / k_max
+        params_MDRD = [k_max, eta_R]
+        gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="I_MD_to_RD", jit=True)
+
+    get_gwb_func = jit(get_gwb)
+
+    # gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD",kernel="I_MD_to_RD", jit=True)
+    # for comparison with RD:
 
     # Parse the number of nodes from command line arguments.
     num_nodes = int(sys.argv[2])
@@ -235,25 +263,25 @@ def main():
 
     # Set the y range for the interpolation.
     y_max = -1.
-    y_min = -8.
+    y_min = -12.
     y_mins = np.array(num_nodes * [y_min])
     y_maxs = np.array(num_nodes * [y_max])
 
     # Set up the sampler.
     ndim = free_nodes + num_nodes
     sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
-                                            ,pool=(None,4),filepath=f'./results/nautilus_{model}_RDvsMDRD_{num_nodes}_linear_nodes.h5') #MDRD
+                                            ,pool=(None,4),filepath=f'./results/nautilus_{model}_MDRD_{num_nodes}_linear_nodes.h5')
     start = time.time()
-    sampler.run(verbose=True, f_live=0.01,n_like_max=1e6) #f_live=0.005, n_like_max=5e6)#, n_eff=2000*ndim)
+    sampler.run(verbose=True, f_live=0.005,n_like_max=1e6) #f_live=0.005, n_like_max=5e6)#, n_eff=2000*ndim)
     end = time.time()
     print('Time taken: {:.2f} s'.format(end - start))
     print('log Z: {:.2f}'.format(sampler.log_z))
 
     # Retrieve posterior samples.
     samples, logl, logwt = sampler.posterior()
-    # np.savez(f'./results/nautilus_{model}_MDRD_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
-    np.savez(f'./results/nautilus_{model}_RDvsMDRD_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt,
+    np.savez(f'./results/nautilus_{model}_MDRD_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt,
              logz=sampler.log_z)
+
     print(samples.shape)
     print(logl.shape)
     print(logwt.shape)

@@ -16,7 +16,7 @@ config.update("jax_enable_x64", True)
 font = {'size': 16, 'family': 'serif'}
 axislabelfontsize = 'large'
 matplotlib.rc('font', **font)
-# matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 def split_vmap(func,input_arrays,batch_size=32):
@@ -88,7 +88,14 @@ t_expanded = jnp.expand_dims(t, axis=-1)
 t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
 
 # Create the gravitational wave background calculator.
-gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="I_MD_to_RD", jit=True)
+# if '_RD' in model:
+#     gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies,
+#                                 norm="RD", kernel="RD", jit=True)
+# else:
+#     gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies,
+#                                 norm="RD", kernel="I_MD_to_RD", jit=True)
+
+# gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="I_MD_to_RD", jit=True)
 
 # Parse the number of nodes from command line arguments.
 num_nodes = int(sys.argv[2])
@@ -102,7 +109,9 @@ y_min = -6.
 y_max = -2.
 
 # get the samples
-samples_data = np.load(f'./results/nautilus_{model}_RDvsMDRD_{num_nodes}_linear_nodes.npz')
+samples_data = np.load(f'./results/nautilus_{model}_MDRD_{num_nodes}_linear_nodes.npz') #MDRD
+# TO COMPARE WITH RD:
+# samples_data = np.load(f'./results/nautilus_{model}_RDvsMDRD_{num_nodes}_linear_nodes.npz')
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
@@ -135,16 +144,25 @@ thinned_weights = thinned_weights / thinned_weights.sum()
 
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
 
-k_max = 10**(-2) # Wavenumber at transition to RD
-eta_R = 20/k_max # Conformal time at the end of RD
-params = [k_max, eta_R]
+if '_RD' in model:
+    params_MDRD = None
+    gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="RD", jit=True)
+else:
+    k_max = 6e-3
+    eta_R = 20 / k_max
+    params_MDRD = [k_max, eta_R]
+    gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", kernel="I_MD_to_RD", jit=True)
 
 def get_pz_omega(nodes, vals):
     # Given nodes and vals, compute Pζ and Ω_GW.
     pf = lambda k, *args: interpolate(nodes, vals, jnp.log10(k))
     pz_amps = pf(p_arr_local)
-    gwb_res = gwb_calculator(pf, frequencies, *params)
+    if params_MDRD is not None:
+        gwb_res = gwb_calculator(pf, frequencies, *params_MDRD)
+    else:
+        gwb_res = gwb_calculator(pf, frequencies)
     return (pz_amps, gwb_res)
+
 
 pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
 
@@ -162,4 +180,4 @@ for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./results/nautilus_{model}_RDvsMDRD_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'./results/nautilus_{model}_MDRD_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')

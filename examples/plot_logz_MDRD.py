@@ -17,7 +17,7 @@ config.update("jax_enable_x64", True)
 font = {'size': 16, 'family': 'serif'}
 axislabelfontsize = 'large'
 matplotlib.rc('font', **font)
-# matplotlib.rc('text', usetex=True)
+matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 # input model and files
@@ -29,7 +29,8 @@ import re
 # ...existing code...
 
 # Check current working directory for files matching the pattern
-pattern =re.compile(rf'nautilus_{model}_RDvsMDRD_(\d+)_linear_nodes\.npz')
+pattern =re.compile(rf'nautilus_{model}_MDRD_(\d+)_linear_nodes\.npz')
+# pattern =re.compile(rf'nautilus_{model}_RDvsMDRD_(\d+)_linear_nodes\.npz') # MDRD
 
 # List all files in the current working directory
 files_in_dir = os.listdir('./results')
@@ -67,11 +68,13 @@ plt.plot(Num_nodes, logZ, '-.',color='k',alpha=0.9)
 plt.scatter(Num_nodes, logZ, color='k',marker='x',s=20)
 # Annotate each point with its logZ value
 ax = plt.gca()
-y_min = min(logZ) - 5
-y_max = max(logZ) + 5
+sp = 10
+y_min = min(logZ) - 2*sp
+y_max = max(logZ) + sp
 ax.set_ylim(y_min, y_max)
-ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 0.5)
+ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 1)
+# ax.set_xticks(range(min(Num_nodes) - 1, max(Num_nodes) + 2, 2))
 y_mid = (ax.get_ylim()[0] + ax.get_ylim()[1]) / 2
 for x, y in zip(Num_nodes, logZ):
-    plt.text(x+0.1, y-2, f'({y:.2f})', fontsize=12, ha='center', va='bottom')
-plt.savefig(f'./results/linear_logz_{model}_RDvsMDRD.pdf',bbox_inches='tight')
+    plt.text(x+ 0.35, y-0.3*sp, f'({y:.2f})', fontsize=11, ha='center', va='top')
+    plt.savefig(f'./results/linear_logz_{model}_MDRD.pdf', bbox_inches='tight')
