@@ -1,5 +1,5 @@
 import sys,os
-# os.environ['XLA_FLAGS'] = f"--xla_force_host_platform_device_count={int(sys.argv[2])}"
+cpus_per_task= int(sys.argv[2])
 import numpy as np
 import matplotlib.pyplot as plt
 from ceffyl import Ceffyl
@@ -88,19 +88,20 @@ def log_likelihood(params,pta=None):
 
 def main():
     # the data file
-    data_dir = './NG15_Ceffyl/30f_fs{cp}_ceffyl/'
+    data_dir = './NG15_Ceffyl/30f_fs{hd}_ceffyl/'
+    freqs = np.load(f'{data_dir}/freqs.npy')
+    frequencies = freqs[:14]
     # set up the power spectrum and GWB model
     num_nodes = int(sys.argv[1])
     print(f"Running inference with number of nodes: {num_nodes}, free nodes: {num_nodes-2}")
     free_nodes = num_nodes - 2
-    left_node = -9.
-    right_node = -7.5
-    freqs = np.load(f'{data_dir}/freqs.npy')
-    frequencies = freqs[:5]
-    y_max = -1.
-    y_min = -6.
+    left_node = np.log10(min(frequencies)/5) #-9.
+    right_node = np.log10(max(frequencies)*5) #-7.5
+    print(f"left_node = {left_node}, right_node = {right_node}")
+    y_max = 0.
+    y_min = -8
     s = jnp.linspace(0, 1, 15)  # First rescaled internal momentum
-    t = jnp.logspace(-5,5, 200)  # Second rescaled internal momentum
+    t = jnp.logspace(-5,5, 500)  # Second rescaled internal momentum
     t_expanded = jnp.expand_dims(t, axis=-1)
     ## Repeat t along the new axis to match the shape (100, 1000)
     t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
@@ -145,11 +146,11 @@ def main():
     from nautilus import Sampler
     ndim = free_nodes + num_nodes
     sampler = Sampler(prior, loglike, ndim, pass_dict=False,vectorized=False
-                      ,filepath=f'samples_{num_nodes}_linear.h5'
-                      ,pool=(None,MPIPoolExecutor()) )
+                      ,filepath=f'Ceffyl_samples_{num_nodes}_linear.h5'
+                      ,pool=None )
     # print("Starting Sampling")
     start = time.time()
-    sampler.run(verbose=True,f_live=0.002,n_like_max=int(5e6))
+    sampler.run(verbose=True,f_live=0.005,n_like_max=int(1e6))
     end = time.time()
     print('Sampling complete, time taken: {:.4f} s'.format(end-start))
     print('log Z: {:.4f}'.format(sampler.log_z))

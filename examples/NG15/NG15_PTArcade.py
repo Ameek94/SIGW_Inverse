@@ -15,7 +15,7 @@ import sys
 import time
 from functools import partial
 from nautilus import Sampler
-from HD_model import num_nodes
+from HD_model import num_nodes, left_node, right_node, y_min, y_max
 import dynesty
 # from mpi4py.futures import MPIPoolExecutor
 
@@ -57,11 +57,12 @@ def main():
 
     # num_nodes = 3
     print(f"Running inference with number of nodes: {num_nodes}, free nodes: {num_nodes-2}")
+    print(f"left_node = {left_node}, right_node = {right_node}, y_min = {y_min}, y_max = {y_max}")
     free_nodes = num_nodes - 2
-    left_node = -9.
-    right_node = -7.
-    y_min = -8.
-    y_max = 0.
+    # left_node = -9.
+    # right_node = -7.
+    # y_min = -8.
+    # y_max = 0.
 
     inputs, input_options = get_user_args()
 

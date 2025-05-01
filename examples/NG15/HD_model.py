@@ -16,24 +16,6 @@ name = 'sigw_hd_'+str(num_nodes)+'_nodes'
 
 # print(parameters.keys())
 
-left_node = -9.
-right_node = -7.
-nodes = jnp.linspace(left_node,right_node,num_nodes)
-y_min = -8.
-y_max = 0.
-parameters = {'x%i' % i: prior("Uniform", left_node, right_node) for i in range(num_nodes-2)}
-parameters.update({'y%i' % i: prior("Uniform", y_min, y_max) for i in range(num_nodes)})
-
-# @jit
-def interpolate(nodes, vals, x):
-    # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
-    # spl = CubicSpline(nodes, vals, check=False)
-    # Testing linear interpolation
-    # spl = lambda x: 
-    res = jnp.power(10, jnp.interp(jnp.log10(x), nodes, vals))
-    res = jnp.where(x < -9., 0, res)
-    res = jnp.where(x > -7., 0, res)
-    return res
 
 data_dir = './NG15_Ceffyl/30f_fs{hd}_ceffyl/'
 freqs = np.load(f'{data_dir}/freqs.npy')
@@ -45,6 +27,16 @@ t_expanded = jnp.expand_dims(t, axis=-1)
 t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
 
 gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, kernel="RD", upsample=False,to_numpy=True,jit=False)
+
+
+left_node = np.log10(min(frequencies)/5)#-9.
+right_node = np.log10(max(frequencies)*5) #-7.
+nodes = jnp.linspace(left_node,right_node,num_nodes)
+y_min = -8.
+y_max = 0.
+parameters = {'x%i' % i: prior("Uniform", left_node, right_node) for i in range(num_nodes-2)}
+parameters.update({'y%i' % i: prior("Uniform", y_min, y_max) for i in range(num_nodes)})
+
 
 def interpolate(nodes, vals, x):
     # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
