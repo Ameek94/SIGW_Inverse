@@ -15,7 +15,7 @@ from omega_gw_jax import OmegaGWjax
 from getdist import plots, MCSamples, loadMCSamples
 from interpax import CubicSpline
 from functools import partial
-from nautilus import Sampler
+from dynesty import DynamicNestedSampler
 from mpi4py.futures import MPIPoolExecutor
 
 # Set matplotlib parameters
@@ -112,23 +112,24 @@ def get_gwb(nodes, vals):
     # Given nodes and values, create a function for Pζ and compute Ω_GW.
     pf = lambda k: interpolate(nodes, vals, jnp.log10(k))
     omegagw = gwb_calculator(pf, frequencies)
-    return (omegagw,)
+    return omegagw
 
 # JIT compile get_gwb for speed.
 get_gwb_func = jit(get_gwb)
 
 @jit
 def likelihood(params):
-    params = jnp.atleast_2d(params)
-    nodes = params[:, :free_nodes]
+    nodes = params[:free_nodes]
     # Pad nodes with fixed endpoints
-    nodes = jnp.pad(nodes, ((0, 0), (1, 1)), 'constant',
-                      constant_values=((0, 0), (left_node, right_node)))
-    vals = params[:, free_nodes:]
-    omegagw = split_vmap(get_gwb_func, (nodes, vals), batch_size=100)[0]
+    nodes = jnp.pad(nodes, ((1, 1),), 'constant', constant_values=(left_node, right_node))
+    vals = params[free_nodes:]
+    # print(f"shapes: {nodes.shape}, {vals.shape}")
+    omegagw = get_gwb(nodes,vals) #split_vmap(get_gwb_func, (nodes, vals), batch_size=100)[0]
     diff = omegagw - Omegas
-    sol =jnp.linalg.solve(cov, diff.T).T
-    res = -0.5 * jnp.sum(diff * sol, axis=1)
+    # print(f"diff shape: {diff.shape}")
+    sol = jnp.linalg.solve(cov, diff.T).T
+    # print(f"sol shape: {sol.shape}")
+    res = -0.5 * jnp.dot(diff, sol.T)
     res = jnp.where(jnp.isnan(res), -1e10, res)
     res = jnp.where(res < -1e10, -1e10, res)
     return res
@@ -192,7 +193,7 @@ def main():
     # Load the gravitational wave background data.
     data = np.load(f'./{model}_data.npz')
     frequencies = data['k']
-    Omegas = data['gw']
+    Omegas = jnp.array(data['gw'])
     cov = data['cov']
     p_arr = data['p_arr']
     pz_amp = data['pz_amp']
@@ -224,55 +225,26 @@ def main():
 
     # Set up the sampler.
     ndim = free_nodes + num_nodes
-    sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
-                                            ,pool=(None,4),filepath=f'./nautilus_{model}_{num_nodes}_linear_nodes.h5') 
+    sampler = DynamicNestedSampler(likelihood, prior_1D, ndim,sample='rwalk',)
+    # sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
+    #                                         ,pool=(None,4),filepath=f'./nautilus_{model}_{num_nodes}_linear_nodes.h5') 
 
     start = time.time()
-    sampler.run(verbose=True, f_live=0.005, n_like_max=3e6)#, n_eff=2000*ndim)
+    sampler.run_nested(print_progress=True,dlogz_init=0.01,maxcall=int(1e6))#, n_eff=2000*ndim)
     end = time.time()
+    res = sampler.results
+    logz = res['logz'][-1]
+    logzerr = res['logzerr'][-1]
+    print('log Z: {:.2f} +/- {:.2f}'.format(logz, logzerr))
     print('Time taken: {:.2f} s'.format(end - start))
-    print('log Z: {:.2f}'.format(sampler.log_z))
+    # print('log Z: {:.2f}'.format(sampler.log_z))
 
-    # Retrieve posterior samples.
-    samples, logl, logwt = sampler.posterior()
-    np.savez(f'nautilus_{model}_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
-    print(samples.shape)
-    print(logl.shape)
-    print(logwt.shape)
-
-    # # Resample to obtain equally weighted samples.
-    # rstate = np.random.default_rng(100000)
-    # samples, lp = resample_equal(samples, logl, logwt, rstate=rstate)
-    # print("Obtained equally weighted samples")
-    # print(f"Max and min logprob: {np.max(lp)}, {np.min(lp)}")
-    # print(len(lp))
-
-    # # Postprocessing: Compute functional posteriors.
-    # p_arr_local = jnp.logspace(left_node + 0.001, right_node - 0.001, 150)
-    # thinning = samples.shape[0] // 512
-    # xs = samples[:, :free_nodes][::thinning]
-    # ys = samples[:, free_nodes:][::thinning]
-    # xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
-    # ys = jnp.array(ys)
-    # pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
-
-    # print(pz_amps.shape)
-    # print(gwb_amps.shape)
-
-    # fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
-    #                                     k_arr=[p_arr_local, frequencies],
-    #                                     aspect_ratio=(6, 4))
-    # ax[0].loglog(p_arr_local, pz_amp, color='k', lw=1.5)
-    # ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
-
-    # # Add secondary x-axis (e.g. converting f [Hz] to k [Mpc^{-1}]).
-    # k_mpc_f_hz = 2 * np.pi * 1.03 * 10**14
-    # for x in ax:
-    #     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz,
-    #                                                    lambda x: x / k_mpc_f_hz))
-    #     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$", labelpad=10)
-
-    # plt.savefig(f'{model}_{num_nodes}.pdf', bbox_inches='tight')
+    # # Retrieve posterior samples.
+    # samples, logl, logwt = sampler.posterior()
+    # np.savez(f'nautilus_{model}_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
+    # print(samples.shape)
+    # print(logl.shape)
+    # print(logwt.shape)
     # plt.show()
 
 if __name__ == '__main__':

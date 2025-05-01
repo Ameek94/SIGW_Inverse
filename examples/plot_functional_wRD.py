@@ -74,7 +74,7 @@ def plot_functional_posterior(vals=[], k_arr=[], intervals=[99.7, 95., 68.],
 
 model = str(sys.argv[1])
 # Load the gravitational wave background data.
-data = np.load('./spectra_0p8.npz')
+data = np.load('./spectra_0p66_interp.npz')
 print(f'data files: {data.files}')
 frequencies = data['frequencies']
 Omegas = data[f'gw_{model}'] 
@@ -104,10 +104,10 @@ free_nodes = num_nodes - 2
 
 # Set the range for the x (log10) nodes using the data.
 y_min = -6.
-y_max = -1.
+y_max = -0.
 
 # get the samples
-samples_data = np.load(f'./nautilus_{model}_{num_nodes}_linear_wRD.npz')
+samples_data = np.load(f'{model}_wfld_free_{num_nodes}_wRD.npz')
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
@@ -163,4 +163,4 @@ for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./nautilus_{model}_{num_nodes}_linear_wRD_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'./{model}_wfld_free_{num_nodes}_wRD_posterior.pdf',bbox_inches='tight')

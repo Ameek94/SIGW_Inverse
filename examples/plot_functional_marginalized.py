@@ -1,4 +1,6 @@
 import sys
+import os 
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
@@ -9,6 +11,7 @@ from omega_gw_jax import OmegaGWjax
 from getdist import plots, MCSamples, loadMCSamples
 from interpax import CubicSpline
 from jax import config, vmap
+from scipy.special import logsumexp
 config.update("jax_enable_x64", True)
 
 
@@ -23,6 +26,28 @@ def renormalise_log_weights(log_weights):
     log_total = logsumexp(log_weights)
     normalized_weights = np.exp(log_weights - log_total)
     return normalized_weights
+
+def resample_equal(samples, logl, logwt, rstate):
+    # Resample samples to obtain equal weights.
+    wt = np.exp(logwt)
+    weights = wt / wt.sum()
+    cumulative_sum = np.cumsum(weights)
+    cumulative_sum /= cumulative_sum[-1]
+    nsamples = len(weights)
+    positions = (rstate.random() + np.arange(nsamples)) / nsamples
+    idx = np.zeros(nsamples, dtype=int)
+    i, j = 0, 0
+    while i < nsamples:
+        if positions[i] < cumulative_sum[j]:
+            idx[i] = j
+            i += 1
+        else:
+            j += 1
+    perm = rstate.permutation(nsamples)
+    resampled_samples = samples[idx][perm]
+    resampled_logl = logl[idx][perm]
+    return resampled_samples, resampled_logl
+
 
 def split_vmap(func,input_arrays,batch_size=32):
     """
@@ -96,8 +121,6 @@ t = jnp.repeat(t_expanded, len(frequencies), axis=-1)
 gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", jit=True)
 
 # Parse the number of nodes from command line arguments.
-num_nodes = int(sys.argv[2])
-free_nodes = num_nodes - 2
 
 # Set the range for the x (log10) nodes using the data.
 pk_min, pk_max = min(p_arr), max(p_arr)
@@ -106,12 +129,6 @@ right_node = np.log10(pk_max)
 y_min = -6.
 y_max = -2.
 
-# get the samples
-samples_data = np.load(f'./nautilus_{model}_{num_nodes}_linear_nodes.npz')
-samples = samples_data['samples']
-logl = samples_data['logl']
-logz = samples_data['logz']
-print(f"Logz: {logz}, max logl: {logl.max()}")
 
 def interpolate(nodes, vals, x):
     # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
@@ -124,19 +141,7 @@ def interpolate(nodes, vals, x):
     return res
 
 # thinning the samples
-num_samples = int(sys.argv[3])
-thinning = max(1,len(samples)//num_samples)
-xs = samples[:, :free_nodes][::thinning]
-ys = samples[:, free_nodes:][::thinning]
-xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
-ys = jnp.array(ys)
-logwt = samples_data['logwt'][::thinning]
-print(xs.shape, ys.shape, logwt.shape)
-from scipy.special import logsumexp
-logwt_total = logsumexp(logwt)
-thinned_weights = np.exp(logwt - logwt_total)
-thinned_weights = thinned_weights / thinned_weights.sum()
-# print(weights.shape)
+num_samples = int(sys.argv[2])
 
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
 
@@ -147,12 +152,53 @@ def get_pz_omega(nodes, vals):
     gwb_res = gwb_calculator(pf, frequencies)
     return (pz_amps, gwb_res)
 
-pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
+# Check current working directory for files matching the pattern
+pattern = re.compile(rf'nautilus_{model}_(\d+)_linear_nodes\.npz')
 
+# List all files in the current working directory
+files_in_dir = os.listdir(os.getcwd())
 
-fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
+# Filter files matching the pattern where n > 2
+matching_files = [f for f in files_in_dir if pattern.match(f) and int(pattern.match(f).group(1)) > 2]
+logz_list = []
+logweights = []
+gwb_samples = []
+pz_samples = []
+if matching_files:
+    print("Matching files found:")
+    for file in matching_files:
+        n = int(pattern.match(file).group(1))
+        free_nodes = n - 2
+        print(f"Processing file: {file} with {n} nodes")
+        data = np.load(file)
+        logz = data['logz'].item()
+        print(f"Logz: {logz:.4f}")
+        samples, logl, logwt = data['samples'], data['logl'], data['logwt']
+        equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.default_rng())
+        thinning = max(1,len(samples)//num_samples)
+        xs = equal_samples[:, :free_nodes][::thinning]
+        ys = equal_samples[:, free_nodes:][::thinning]
+        xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
+        ys = jnp.array(ys)
+        pz, gwb = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
+        pz_samples.append(pz)
+        gwb_samples.append(gwb)
+        logz_list.append(logz)
+        logweight = np.ones(len(xs)) * logz
+        print(f"pz_samples shape: {pz.shape}, gwb_samples shape: {gwb.shape}, logweight shape: {logweight.shape}")
+        logweights.append(logweight)
+
+# no renormalise the logweights
+logweights = np.concatenate(logweights)
+weights = renormalise_log_weights(logweights)
+gwb_samples = np.concatenate(gwb_samples)
+pz_samples = np.concatenate(pz_samples)
+
+print(f"pz_samples shape: {pz_samples.shape}, gwb_samples shape: {gwb_samples.shape}, weights shape: {weights.shape}")
+
+fig, ax = plot_functional_posterior([pz_samples,gwb_samples],
                                     k_arr=[p_arr_local, frequencies],
-                                    weights = thinned_weights,
+                                    weights = weights,
                                     aspect_ratio=(6,4.5))
 ax[0].loglog(p_arr, pz_amp, color='k', lw=1.5)
 ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
@@ -163,4 +209,4 @@ for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./results/nautilus_{model}_{num_nodes}_linear_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'./results/nautilus_{model}_linear_posterior.pdf',bbox_inches='tight')
