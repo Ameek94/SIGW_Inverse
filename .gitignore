@@ -20,3 +20,4 @@ model_files/
 .venv
 *.pkl
 *.log
+.DS_Store
