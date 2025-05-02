@@ -154,7 +154,11 @@ def IYsq2_w(d,s,b):
 
 # Define function I_J^2 for c_s^2=1
 def IJsq2_1(d,s,b):
+    if np.any(s**2-d**2==0):
+        print("Warning: IJsq2_1 is singular for s=d")
     y  = (s**2+d**2-2)/(s**2-d**2)
+    if np.any(y==1):
+        print("Warning: IJsq2_1 is singular for y=1")
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4
     P1 = ((1+y)/(1-y))**(-b/2)/special.gamma(1+b)*special.hyp2f1(
@@ -166,6 +170,8 @@ def IJsq2_1(d,s,b):
 
 # Define function I_Y^2 for c_s^2=1 
 def IYsq2_1(d,s,b):
+    if np.any(s**2-d**2==0):
+        print("Warning: IYsq2_1 is singular for s=d")
     y  = (s**2+d**2-2)/(s**2-d**2)
     N  = (1+b)**(-2*(1+b))*16**(1+b)/3*((2+b)/(3+2*b))**2*(
                                                        special.gamma(b+3/2))**4

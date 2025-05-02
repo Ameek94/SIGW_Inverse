@@ -1,7 +1,5 @@
 from functools import partial
 import os
-# print OMP NUM Threads
-print(f'NUM THREADS = {os.environ.get("OMP_NUM_THREADS")}')
 import sys
 import time
 import numpy as np
@@ -11,9 +9,6 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from nautilus import Sampler
 import math
-import pypolychord
-from pypolychord.settings import PolyChordSettings
-from pypolychord.priors import UniformPrior, SortedUniformPrior
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -30,7 +25,7 @@ kernel_cache = OrderedDict()
 
 cache_counter = 0
 
-def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=8):
+def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=6):
     global cache_counter
 
     # Round w to the desired tolerance (number of decimals)
@@ -46,7 +41,7 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=8):
     kernel1 = sd.kernel1_w(d1array, s1array, b)
     kernel2 = sd.kernel2_w(d2array, s2array, b)
     
-    # If cache size exceeds, remove the least recently used entry
+    # If cache size is 4, remove the least recently used entry
     if len(kernel_cache) >= 500:
         kernel_cache.popitem(last=False)
     
@@ -76,8 +71,15 @@ def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
     params = cube.copy()
     w = params[0]
     w = w * (w_max - w_min) + w_min
-    xs = SortedUniformPrior(left_node,right_node)(params[1:free_nodes+1])
-    ys = UniformPrior(y_min,y_max)(params[free_nodes+1:])
+    xs = params[1:free_nodes+1]
+    N = len(xs)
+    t = np.zeros(N)
+    t[N-1] = xs[N-1]**(1./N)
+    for n in range(N-2, -1, -1):
+        t[n] = xs[n]**(1./(n+1)) * t[n+1]
+    xs = t*(right_node - left_node) + left_node
+    ys = params[free_nodes+1:]
+    ys = ys * (y_max - y_min) + y_min
     return np.concatenate([[w],xs, ys])
 
 def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
@@ -90,13 +92,29 @@ def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies,
     diff = omegagw - Omegas
     return -0.5 * np.dot(diff, np.linalg.solve(cov, diff)), omegagw
 
-def dumper(live, dead, logweights, logZ, logZerr):
-    print("Last dead point:", dead[-1])
-
+def resample_equal(samples, logl, logwt, rstate):
+    wt = np.exp(logwt)
+    weights = wt / wt.sum()
+    cumulative_sum = np.cumsum(weights)
+    cumulative_sum /= cumulative_sum[-1]
+    nsamples = len(weights)
+    positions = (rstate.random() + np.arange(nsamples)) / nsamples
+    idx = np.zeros(nsamples, dtype=int)
+    i, j = 0, 0
+    while i < nsamples:
+        if positions[i] < cumulative_sum[j]:
+            idx[i] = j
+            i += 1
+        else:
+            j += 1
+    perm = rstate.permutation(nsamples)
+    resampled_samples = samples[idx][perm]
+    resampled_logl = logl[idx][perm]
+    return resampled_samples, resampled_logl
 
 def main():
     # Load the gwb data from file
-    data = np.load('./spectra_0p66_interp.npz')
+    data = np.load('./spectra_0p99_interp.npz')
     frequencies = data['frequencies']
     gwb_model = str(sys.argv[1])
     Omegas = data[f'gw_{gwb_model}'] 
@@ -115,9 +133,10 @@ def main():
     y_min = -8.
 
     w_min = 0.1
-    w_max = 0.99
+    w_max = 0.9
     log10_f_rh = -5.
 
+    ndim = 1 + free_nodes + num_nodes
 
     prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
                               free_nodes=free_nodes,
@@ -128,39 +147,15 @@ def main():
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    nDims = 1 + free_nodes + num_nodes
-    nDerived = len(frequencies)
-    settings = PolyChordSettings(nDims, nDerived)
-    settings.file_root = f'{gwb_model}_pchord_free_{str(num_nodes)}'
-    settings.nlive = 25 * nDims
-    settings.do_clustering = True
-    settings.read_resume = True
-    settings.precision_criterion = 0.01
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
+                      filepath=f'{gwb_model}_w0p99_free_{num_nodes}.h5',pool=(None,8))
 
-    start = time.time()
-    output = pypolychord.run_polychord(loglikelihood, nDims, nDerived, settings
-                                       , prior_transform, dumper)
+    sampler.run(verbose=True, f_live=0.005,n_like_max=int(2e6))
+    print('log Z: {:.4f}'.format(sampler.log_z))
 
-    end = time.time()
-    print(f"Time taken: {end - start:.4f}")
-    paramnames = [('w', r'w')]
-    paramnames += [('x%i' % i, r'x_%i' % i) for i in range(free_nodes)]
-    paramnames += [('y%i' % i, r'y_%i' % i) for i in range(num_nodes)]
-    paramnames += [('gw%i*'%i, r'gw_%i' % i) for i in range(len(frequencies))]
-
-    output.make_paramnames_files(paramnames)
-
-    posterior = output.posterior
-
-    import getdist.plots
-    g = getdist.plots.getSubplotPlotter(subplot_size=3.5)
-    blue = '#006FED'
-    g.settings.title_limit_fontsize = 14
-    g.settings.axes_fontsize=16
-    g.settings.axes_labelsize=18
-    g.plot_1d(posterior, param = 'w', marker=2/3, marker_color=blue, colors=[blue],title_limit=1)
-    g.export(settings.file_root + '_w.pdf')
-
+    samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
+    print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
+    np.savez(f'{gwb_model}_w0p99_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

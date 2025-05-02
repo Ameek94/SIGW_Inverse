@@ -21,11 +21,11 @@ from scipy.interpolate import interp1d
 
 ### SIGWfast
 sys.path.append('./libraries/')
-try:
-    from libraries import sdintegral_numba as sd
-except ModuleNotFoundError:
-    print("Numba not installed. Please install numba and numba-scipy to use the numba-scipy kernel (recommended for non-standard kernels). Using default scipy kernel.")
-    from sigw_fast.libraries import sdintegral as sd
+# try:
+#     from libraries import sdintegral_numba as sd
+# except ModuleNotFoundError:
+#     print("Numba not installed. Please install numba and numba-scipy to use the numba-scipy kernel (recommended for non-standard kernels). Using default scipy kernel.")
+from sigw_fast.libraries import sdintegral as sd
 
 #=============================================================================#
                               # CONFIGURATION #
@@ -395,6 +395,8 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3,nd=250):
         # the power spectrum as flattened arrays, with kernel1 to be used for
         # the integration over s<1/sqrt(w) and kernel2 for s>1/sqrt(w).
         kernel = sd.kernel_1(ddarray, ssarray, beta)
+        print(f"Infs in kernel: {np.isinf(kernel).any()}")
+        print(f"Nans in kernel: {np.isnan(kernel).any()}")
         # Compute Omega_GW for every value of k in komega by performing 
         # discrete integration over d and s.
         # for k in tqdm.tqdm(range(0,nk)):
@@ -415,6 +417,10 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3,nd=250):
             Int[k] = sd.intarray1D(Int_d,darray)
         # Multiply the result from the integration by the normalization and the
         # k-dependent redshift factor to get the final result of Omega_GW
+        print(f"Nans in python integral: {np.isnan(Int).any()}")
+        print(f"Inf in python integral: {np.isinf(Int).any()}")
+        print(f"Max in python integral: {np.max(Int)}")
+        print(f"Min in python integral: {np.min(Int)}")
         OmegaGW = norm*Int #(komega)**(-2*beta)*Int
         #Stop timer 
         end1 = time.time()
@@ -438,7 +444,7 @@ def compute_1(Pofk,komega,Use_Cpp=True,w=1/3,nd=250):
 
 def compute(Pofk, komega,nd = 150, w=1/3,cs_equal_one=False, Use_Cpp=True, fref=1.,f_rh=1e-6):
     if cs_equal_one:
-        res = compute_1(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,)
+        res = compute_1(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,nd = nd)
     else:
         res = compute_w(Pofk=Pofk, komega =  komega, Use_Cpp=Use_Cpp,w=w,nd=nd)
     two_b = 2 * (1-3*w)/(1+3*w) 

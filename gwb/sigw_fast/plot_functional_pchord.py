@@ -23,7 +23,7 @@ kstar = 1e-3
 omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
 cov = np.diag(omks_sigma**2)
 p_arr_data = data['pk_arr']
-pz_amps = data[f'pk_{gwb_model}']
+pz_amp = data[f'pk_{gwb_model}']
 pk_min, pk_max = min(p_arr_data), max(p_arr_data)
 left_node = np.log10(pk_min)
 right_node = np.log10(pk_max)
@@ -33,19 +33,19 @@ num_nodes = int(sys.argv[2])
 w = data['w'].item()
 
 blue = '#006FED'
-def plot_functional_posterior(funcs,samples,k_arr = [], intervals=[99.7, 95., 68.],
+def plot_functional_posterior(vals,k_arr = [], intervals=[99.7, 95., 68.],
                               ylabels=[r'$P_{\zeta}$', r'$\Omega_{\rm GW}$'],
                               aspect_ratio=(6, 4.5),
                               interval_cols=[('#006FED', 0.2), ('#006FED', 0.4), ('#006FED', 0.6)]):
     # given a function y = f(k|x) with x~Posterior samples, plot the posterior of y at k_arr, with symmetric credible intervals
 
-    nfuncs = len(funcs)
+    nfuncs = len(vals)
 
     fig, ax = plt.subplots(1,nfuncs,figsize=(aspect_ratio[0]*nfuncs,aspect_ratio[1]),constrained_layout=True)
     if nfuncs == 1:
         ax = [ax]
-    for i,func in enumerate(funcs):
-        y = func(k_arr[i],samples) # so y should have shape (nsamples, nk)
+    for i,val in enumerate(vals):
+        y = val # func(k_arr[i],samples) # so y should have shape (nsamples, nk)
         for j,interval in enumerate(intervals):
             y_low, y_high = np.percentile(y,[50-interval/2,50+interval/2],axis=0)
             ax[i].fill_between(k_arr[i],y_low,y_high,color=interval_cols[j])
@@ -94,6 +94,17 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
     kernel_cache[key] = (kernel1, kernel2)
     return kernel_cache[key]
 
+
+sample_data = np.loadtxt(f'./chains/{gwb_model}_pchord_free_{num_nodes}_equal_weights.txt') #np.load(f'{gwb_model}_wfld_free_{num_nodes}.npz')
+xs_start = 3
+xs_end = xs_start + num_nodes - 2
+ys_start = xs_end
+ys_end = ys_start + num_nodes
+xs = sample_data[:, xs_start:xs_end]
+xs = np.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
+ys = sample_data[:, ys_start:ys_end]
+omega_start = ys_end
+
 def compute_w(frequencies,samples,use_mp=False,nd=150,fref=1.):
     OmegaGW = []
     # for sample in samples:
@@ -123,9 +134,9 @@ def compute_pz(k,samples):
     Pz = []
     # for sample in samples:
     for sample in tqdm.tqdm(samples,desc='Pz'):
-        free_nodes = sample[1:num_nodes-1]
+        free_nodes = sample[xs_start:xs_end]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-        vals = sample[num_nodes-1:]
+        vals = sample[ys_start:ys_end]
         res = gw.power_spectrum_k_array(nodes, vals, k)
         Pz.append(res)
     return np.array(Pz) # Pz has shape (nsamples, nk)
@@ -150,30 +161,31 @@ def resample_equal(samples, logl, logwt, rstate):
     resampled_logl = logl[idx][perm]
     return resampled_samples, resampled_logl
 
-sample_data = np.load(f'{gwb_model}_w0p66_free_{num_nodes}.npz') #np.load(f'{gwb_model}_wfld_free_{num_nodes}.npz')
-samples = sample_data['samples']
-logwt = sample_data['logwt']
-logl = sample_data['logl']
-from scipy.special import logsumexp
-log_total = logsumexp(logwt)
-# Subtract the normalization constant and exponentiate to obtain normalized weights
-normalized_weights = np.exp(logwt - log_total)
-equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.RandomState(0))
+# from scipy.special import logsumexp
+# log_total = logsumexp(logwt)
+# # Subtract the normalization constant and exponentiate to obtain normalized weights
+# normalized_weights = np.exp(logwt - log_total)
+# equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.RandomState(0))
 
-print(f'max logl: {max(equal_logl)}, min logl: {min(equal_logl)}')
+# print(f'max logl: {max(equal_logl)}, min logl: {min(equal_logl)}')
 
 # use 256 samples for plotting 
-thinning = max(1,len(equal_samples) // 512)
+
+thinning = max(1,len(ys) // 1024)
 
 # get 256 random samples from the posterior
-equal_samples_plot = equal_samples[np.random.permutation(len(equal_samples))]
-equal_samples_plot = equal_samples[::thinning]
+# equal_samples_plot = equal_samples[np.random.permutation(len(equal_samples))]
+# equal_samples_plot = equal_samples[::thinning]
 
-fig, ax  = plot_functional_posterior([compute_pz,compute_w],equal_samples_plot
+gwb_amps = sample_data[:, omega_start:]
+pz_amps = compute_pz(p_arr, sample_data)
+print(f"shapes pz, gwb, p_arr: {pz_amps.shape}, {gwb_amps.shape}, {p_arr.shape}")
+
+fig, ax  = plot_functional_posterior([pz_amps,gwb_amps]
                                      ,k_arr = [p_arr,frequencies])
 
 
-ax[0].loglog(p_arr_data,pz_amps, color='k', lw=1.5)
+ax[0].loglog(p_arr_data,pz_amp, color='k', lw=1.5)
 ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
 ax[1].errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt='o', color='k', capsize=4.,alpha=0.5,markersize=2)
 ax[1].legend()
@@ -182,7 +194,7 @@ for x in ax:
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
 
-plt.savefig(f'{gwb_model}_wfld_0p66_{num_nodes}_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'pchord_{gwb_model}_wfld_0p66_{num_nodes}_posterior.pdf',bbox_inches='tight')
 
 print(f"Cached kernel used {cache_counter} times")
 
@@ -191,32 +203,35 @@ labels = ['w']
 bounds = [[0.1,0.99]]
 ranges = dict(zip(names,bounds))
 print(ranges)
+ws = sample_data[:, 2]
 # gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
-gd_samples = MCSamples(samples=equal_samples[:,0], names=names, labels=labels,ranges=ranges,)
+gd_samples = MCSamples(samples=ws, names=names, labels=labels,ranges=ranges,)
 g = plots.get_subplot_plotter(subplot_size=3.5)
 blue = '#006FED'
 g.settings.title_limit_fontsize = 14
 g.settings.axes_fontsize=16
 g.settings.axes_labelsize=18
 g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=2)
-g.export(f'{gwb_model}_wfld_0p66_{num_nodes}_1D_w.pdf')
+g.export(f'pchord_{gwb_model}_wfld_0p66_{num_nodes}_1D_w.pdf')
 
 print(gd_samples.getMargeStats())
 
-# # getdist plots
-# names = ['w']
-# labels = ['w']
-# names+= [f'x_{i}' for i in range(num_nodes-2)]
-# labels+= [f'x_{i}' for i in range(num_nodes-2)]
-# names+= [f'y_{i}' for i in range(num_nodes)]
-# labels+= [f'y_{i}' for i in range(num_nodes)]
-# bounds = [[0.01,0.99]]
-# bounds+= [[left_node, right_node] for i in range(num_nodes-2)]
-# bounds+=[[-6,-2] for i in range(num_nodes)]
-# ranges = dict(zip(names,bounds))
-# print(ranges)
-# gd_sample = MCSamples(samples=samples, names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
-# g = plots.get_subplot_plotter(subplot_size=2.5)
-# markers = {'w': 0.8}
-# g.triangle_plot(gd_sample,filled=True,markers=markers,title_limit=1)
-# g.export(f'{gwb_model}_wfld_{num_nodes}_triangle.pdf')
+# getdist plots
+names = ['w']
+labels = ['w']
+names+= [f'x_{i}' for i in range(num_nodes-2)]
+labels+= [f'x_{i}' for i in range(num_nodes-2)]
+names+= [f'y_{i}' for i in range(num_nodes)]
+labels+= [f'y_{i}' for i in range(num_nodes)]
+bounds = [[0.01,0.99]]
+bounds+= [[left_node, right_node] for i in range(num_nodes-2)]
+bounds+=[[-8.,0.] for i in range(num_nodes)]
+ranges = dict(zip(names,bounds))
+print(ranges)
+samples = sample_data[:,xs_start-1:ys_end]
+print(f"shapes: {samples.shape}, {len(samples)}, {len(names)}")
+gd_sample = MCSamples(samples=samples, names=names, labels=labels,ranges=ranges)#,weights=normalized_weights,loglikes=logl)
+g = plots.get_subplot_plotter(subplot_size=2.5)
+markers = {'w': 2/3}
+g.triangle_plot(gd_sample,filled=True,markers=markers,title_limit=1)
+g.export(f'pchord_{gwb_model}_wfld_{num_nodes}_triangle.pdf')
