@@ -27,3 +27,4 @@ ultranest_*/
 *.save
 examples/.DS_Store
 examples/results/.DS_Store
+*.DS_Store

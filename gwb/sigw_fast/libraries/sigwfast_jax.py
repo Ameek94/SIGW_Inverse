@@ -2,10 +2,11 @@ import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import numpy as np
-import libraries.sdintegral_numba as sd
+import sdintegral_numba as sd
 from interpax import CubicSpline
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import time
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -16,7 +17,7 @@ kernel_cache = OrderedDict()
 
 cache_counter = 0
 
-def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
+def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=5):
     global cache_counter
 
     # Round w to the desired tolerance (number of decimals)
@@ -33,7 +34,7 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
     kernel2 = sd.kernel2_w(d2array, s2array, b)
     
     # If cache size is 4, remove the least recently used entry
-    if len(kernel_cache) >= 100:
+    if len(kernel_cache) >= 500:
         kernel_cache.popitem(last=False)
     
     # Store and return the result
@@ -43,13 +44,13 @@ def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
 
 def interpolate(nodes, vals, x, left_node,right_node):
     # Create a cubic spline interpolation of log10(Pζ) and then convert back to linear scale.
-    spl = CubicSpline(nodes, vals, check=False)
+    spl = lambda x:  jnp.interp(x,nodes,vals) #CubicSpline(nodes, vals, check=False)
     res = jnp.power(10, spl(x))
     res = jnp.where(x < left_node, 0, res)
     res = jnp.where(x > right_node, 0, res)
     return res
 
-def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=100,fref=1.):
+def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.):
 
     Pz = jax.jit(lambda f: interpolate(nodes=nodes,vals=vals,x=jnp.log10(f),left_node=nodes[0],right_node=nodes[-1]))
 
@@ -60,11 +61,11 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=100,fref=1.):
     # kernel2 = sd.kernel2_w(d2array, s2array, b)
 
     # print array shapes for debugging
-    # print(f"nd = {nd}, ns = {ns1}, {ns2}, darray shape = {darray.shape}")
-    # print(f"nd x ns = {nd*ns1}, {nd*ns2}")
-    # print(f"d1array shape = {d1array.shape}, s1array shape = {s1array.shape}")
-    # print(f"d2array shape = {d2array.shape}, s2array shape = {s2array.shape}")
-    # print(f"kernel1 shape = {kernel1.shape}, kernel2 shape = {kernel2.shape}")
+    print(f"nd = {nd}, ns = {ns1}, {ns2}, darray shape = {darray.shape}")
+    print(f"nd x ns = {nd*ns1}, {nd*ns2}")
+    print(f"d1array shape = {d1array.shape}, s1array shape = {s1array.shape}")
+    print(f"d2array shape = {d2array.shape}, s2array shape = {s2array.shape}")
+    print(f"kernel1 shape = {kernel1.shape}, kernel2 shape = {kernel2.shape}")
 
     # convert to jax arrays
     darray = jnp.array(darray)
@@ -77,9 +78,10 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=100,fref=1.):
     K1 = kernel1.reshape((nd, ns1))
     K2 = kernel2.reshape((nd, ns2))
 
-    @jax.jit
+    # @jax.jit
     def compute_single_f(f):
-        psq1 = Pz(f/2 * (s1array + d1array)) * Pz(f/2 * (s1array - d1array))  #psquared_jax(d1array, s1array, Pz, f).reshape((nd, ns1))
+        psq1 = Pz(f/2 * (s1array + d1array)) * Pz(f/2 * (s1array - d1array))
+        print(f"psq1 shape: {psq1.shape}")  #psquared_jax(d1array, s1array, Pz, f).reshape((nd, ns1))
         psq1 = psq1.reshape((nd, ns1))
         psq2 = Pz(f/2 * (s2array + d2array)) * Pz(f/2 * (s2array - d2array))  #psquared_jax(d2array, s2array, Pz, f).reshape((nd, ns2))
         psq2 = psq2.reshape((nd, ns2))
@@ -128,19 +130,24 @@ def bpl(p, pstar=5e-4, n1=2, n2=-1, sigma=2):
     return 1e-2 * pl1 * pl2
 
 def main():
-    w = 0.8
+    w = 0.99
     log10_f_rh = -5.
-    nodes = jnp.array([-5., -4.383505, -3.76701, -3.150515, -2.53402, -1.917525, -1.30103 ])
+    nodes_lr = jnp.array([ -5., 0.]) #
+    nodes = jnp.linspace(nodes_lr[0],nodes_lr[1],100) #, -4.383505, -3.76701, -3.150515, -2.53402, -1.917525
     vals = jnp.log10(bpl(10**nodes)) #jnp.array([-4.05813325,-3.90081585, -2.87794112, -2.36267636, -2.74488783, -3.45095726, -5.41698371])
-    kmin, kmax = 5e-5, 1e-2
-    frequencies = jnp.logspace(jnp.log10(kmin), jnp.log10(kmax), 50)
-    omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=150)
-    data = np.load('../spectra_0p8_interp.npz')
+    # kmin, kmax = 5e-5, 1e-2
+    # frequencies = jnp.logspace(jnp.log10(kmin), jnp.log10(kmax), 50)
+    data = np.load('../spectra_0p99_interp.npz')
     frequencies = jnp.array(data['frequencies'])
     gwb_model = 'bpl'
     Omegas = data[f'gw_{gwb_model}'] 
+    start = time.time()
+    niter = 2
+    for i in range(niter):
+        omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=150)
+    print(f"jax timing for {niter} iterations took {time.time()-start:.4f}s with {-(start-time.time())/niter:.4f}s average ")
     plt.loglog(frequencies, Omegas, label='non jax')
-    plt.loglog(frequencies, omegagw, label='jax')
+    plt.loglog(frequencies, 1.05 * omegagw, label='jax')
     plt.legend()
     plt.xlabel('frequencies')
     plt.ylabel('OmegaGW')
