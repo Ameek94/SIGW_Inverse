@@ -10,6 +10,8 @@ from matplotlib import cm, colors
 from nautilus import Sampler
 import math
 import h5py
+import jax
+jax.config.update("jax_enable_x64", True)
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -23,8 +25,6 @@ from collections import OrderedDict
 
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
-
-cache_counter = 0
 
 cache_counter = 0
 
@@ -71,7 +71,6 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.,ke
     OmegaGW = norm * Integral
     return OmegaGW
 
-
 def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
     params = cube.copy()
     w = params[0]
@@ -86,6 +85,11 @@ def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
     ys = params[free_nodes+1:]
     ys = ys * (y_max - y_min) + y_min
     return np.concatenate([[w],xs, ys])
+
+# # @jax.jit
+# def chi2(diff,sigma):
+#     val = 
+#     return val
 
 def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, omgw_sigma):
     # start = time.time()
@@ -122,15 +126,16 @@ def resample_equal(samples, logl, logwt, rstate):
 
 def main():
     # Load the gwb data from file
-    data = np.load('./spectra_0p99_interp.npz')
+    data_file = str(sys.argv[3])
+    data = np.load(f'./spectra_{data_file}.npz')
     frequencies = data['frequencies']
-    gwb_model = str(sys.argv[1])
-    Omegas = data[f'gw_{gwb_model}'] 
+    gwb_model = str(sys.argv[2])
+    Omegas = data[f'gw_{gwb_model}']
     kstar = 1e-3
     omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
     cov = np.diag(omks_sigma**2)
 
-    num_nodes = int(sys.argv[2])
+    num_nodes = int(sys.argv[1])
     free_nodes = num_nodes - 2
     pk_arr = data['pk_arr']
     pk_min, pk_max = min(pk_arr), max(pk_arr)
@@ -140,8 +145,8 @@ def main():
     y_max = -1.
     y_min = -7.
 
-    w_min = 0.1
-    w_max = 0.999
+    w_min = 0.3
+    w_max = 0.99
     log10_f_rh = -5.
 
     ndim = 1 + free_nodes + num_nodes
@@ -156,14 +161,14 @@ def main():
                             frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
     sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
-                      filepath=f'{gwb_model}_w0p99_free_{num_nodes}.h5',pool=(None,8))
+                      filepath=f'{gwb_model}_{data_file}_free_{num_nodes}.h5',pool=(None,4))
 
     sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_w0p99_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+    np.savez(f'{gwb_model}_{data_file}_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

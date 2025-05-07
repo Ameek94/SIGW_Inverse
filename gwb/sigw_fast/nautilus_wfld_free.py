@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 from nautilus import Sampler
 import math
+import h5py
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -25,36 +26,40 @@ kernel_cache = OrderedDict()
 
 cache_counter = 0
 
-def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=3):
+# open once, reuse for all likelihood calls
+h5 = h5py.File("precomputed_kernels.h5", "r")
+w_vals = h5["w_vals"][:]      # load in memory once; it's small
+# kernel datasets stay on disk until you index them
+dset1 = h5["kernel1"]
+dset2 = h5["kernel2"]
+tol = 1e-3
+
+def get_kernels_from_file(w):
+    # find index of the closest precomputed w
+    idx = np.abs(w_vals - w).argmin()
+    # print(f"Closest precomputed w: {w_vals[idx]:.6f} (target: {w:.6f})")
+    if abs(w_vals[idx] - w) > tol:
+        raise ValueError(f"No precomputed w within ±{tol}: nearest is {w_vals[idx]:.6f}")
+    # pull the two rows
+    k1 = dset1[idx, :]
+    k2 = dset2[idx, :]
+    return k1, k2
+
+def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.,kernels_from_file=True):
     global cache_counter
-
-    # Round w to the desired tolerance (number of decimals)
-    key = round(w, tolerance)
-    # If already cached, update the order and return
-    if key in kernel_cache:
-        cache_counter += 1
-        kernel_cache.move_to_end(key)
-        return kernel_cache[key]
-    
-    # Otherwise compute the kernels
-    b = sd.beta(w)
-    kernel1 = sd.kernel1_w(d1array, s1array, b)
-    kernel2 = sd.kernel2_w(d2array, s2array, b)
-    
-    # If cache size is 4, remove the least recently used entry
-    if len(kernel_cache) >= 500:
-        kernel_cache.popitem(last=False)
-    
-    # Store and return the result
-    kernel_cache[key] = (kernel1, kernel2)
-    return kernel_cache[key]
-
-def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.):
     nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
     b = sd.beta(w)
-    kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
-    # kernel1 = sd.kernel1_w(d1array, s1array, b)
-    # kernel2 = sd.kernel2_w(d2array, s2array, b)
+
+    if kernels_from_file:
+        try:
+            kernel1, kernel2 = get_kernels_from_file(w,)
+            cache_counter += 1
+        except:
+            # If the kernel is not found in the file, compute it
+            kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
+    else:
+        kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
+
     nk = len(frequencies)
     Integral = np.empty_like(frequencies)
     Integral = gw.compute_w_k_array(nodes = nodes, vals = vals, nk = nk,komega = frequencies, 
@@ -82,15 +87,19 @@ def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
     ys = ys * (y_max - y_min) + y_min
     return np.concatenate([[w],xs, ys])
 
-def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
+
+def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, omgw_sigma):
+    # start = time.time()
     w = params[0]
     # log10_f_rh = params[1]
     nodes = params[1:free_nodes+1]
     nodes = np.pad(nodes, (1,1), 'constant', constant_values=(left_node, right_node))
     vals = params[free_nodes+1:]    
-    omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd)
-    diff = omegagw - Omegas
-    return -0.5 * np.dot(diff, np.linalg.solve(cov, diff)), omegagw
+    omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd,kernels_from_file=True)
+    diff = (omegagw - Omegas)
+    ll = -0.5 * np.sum(diff**2 / omgw_sigma**2)
+    # print(f"likelihood took {time.time()-start:.2f} seconds")
+    return ll, omegagw
 
 def resample_equal(samples, logl, logwt, rstate):
     wt = np.exp(logwt)
@@ -133,7 +142,7 @@ def main():
     y_min = -8.
 
     w_min = 0.1
-    w_max = 0.9
+    w_max = 0.99
     log10_f_rh = -5.
 
     ndim = 1 + free_nodes + num_nodes
@@ -145,10 +154,9 @@ def main():
     
     loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, 
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
-                            frequencies=frequencies, Omegas=Omegas, cov=cov)
+                            frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
-                      filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,8))
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,filepath=f'{gwb_model}_w0p66_free_{num_nodes}.h5',pool=(None,4))
 
     sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
