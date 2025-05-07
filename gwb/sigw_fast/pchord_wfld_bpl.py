@@ -72,20 +72,35 @@ def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.):
     OmegaGW = norm * Integral
     return OmegaGW
 
-def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max):
+def prior(cube, w_min, w_max,n_min,n_max, logA_min, logA_max,pstar_min, pstar_max,sigma_min, sigma_max):
     params = cube.copy()
     w = params[0]
     w = w * (w_max - w_min) + w_min
-    xs = SortedUniformPrior(left_node,right_node)(params[1:free_nodes+1])
-    ys = UniformPrior(y_min,y_max)(params[free_nodes+1:])
-    return np.concatenate([[w],xs, ys])
+    n1 = params[1]
+    n1 = n1 * (n_max - n_min) + n_min
+    n2 = params[2]
+    n2 = n2 * (n_max - n_min) + n_min
+    logA = params[3]
+    logA = logA * (logA_max - logA_min) + logA_min
+    pstar = params[4]
+    pstar = pstar * (pstar_max - pstar_min) + pstar_min
+    sigma = params[5]
+    sigma = sigma * (sigma_max - sigma_min) + sigma_min
+    return np.array([w, n1, n2, logA, pstar, sigma])
 
-def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
+
+def pz(p,logA = -2., pstar=np.log10(5e-4), n1=2, n2=-1, sigma=2):
+    pstar = 10**pstar
+    nir = n1
+    pl1 = (p / pstar) ** nir
+    nuv = (n2 - n1) / sigma
+    pl2 = (1 + (p / pstar) ** sigma) ** nuv
+    return 10**(logA) * pl1 * pl2
+
+def likelihood(params, log10_f_rh, nodes, frequencies, Omegas, cov):
     w = params[0]
     # log10_f_rh = params[1]
-    nodes = params[1:free_nodes+1]
-    nodes = np.pad(nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-    vals = params[free_nodes+1:]    
+    vals = np.log10(pz(p=10**nodes,pstar=params[4],n1=params[1],n2=params[2],sigma=params[5], logA = params[3]))
     omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd)
     diff = omegagw - Omegas
     return -0.5 * np.dot(diff, np.linalg.solve(cov, diff)), omegagw
@@ -104,38 +119,46 @@ def main():
     omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
     cov = np.diag(omks_sigma**2)
 
-    num_nodes = int(sys.argv[2])
-    free_nodes = num_nodes - 2
+    num_nodes = 20
     pk_arr = data['pk_arr']
     pk_min, pk_max = min(pk_arr), max(pk_arr)
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = 0.
-    y_min = -8.
+    nodes = np.linspace(left_node,right_node,num_nodes)
 
     w_min = 0.1
     w_max = 0.99
+    n_min = -4.
+    n_max = 4.
+    logA_min = -5.
+    logA_max = 1.
     log10_f_rh = -5.
+    pstar_min = -6.
+    pstar_max = -2.
+    sigma_min = 0.5
+    sigma_max = 3.
 
 
     prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
-                              free_nodes=free_nodes,
-                              left_node=left_node, right_node=right_node,
-                              y_min=y_min, y_max=y_max)
+                              n_min=n_min, n_max=n_max,
+                              logA_max=logA_max, logA_min=logA_min,
+                              pstar_min=pstar_min, pstar_max=pstar_max,
+                              sigma_min=sigma_min, sigma_max=sigma_max)
+
     
     loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, 
-                            free_nodes=free_nodes, left_node=left_node, right_node=right_node,
+                            nodes=nodes,
                             frequencies=frequencies, Omegas=Omegas, cov=cov)
 
-    nDims = 1 + free_nodes + num_nodes
+    nDims = 6
     nDerived = len(frequencies)
     settings = PolyChordSettings(nDims, nDerived)
-    settings.file_root = f'{gwb_model}_pchord_free_{str(num_nodes)}'
-    settings.nlive = 25 * nDims
+    settings.file_root = f'{gwb_model}_pchord_full'
+    settings.nlive = 15 * nDims
     settings.do_clustering = True
     settings.read_resume = True
-    settings.precision_criterion = 0.01
+    settings.precision_criterion = 0.005
 
     start = time.time()
     output = pypolychord.run_polychord(loglikelihood, nDims, nDerived, settings
@@ -144,10 +167,8 @@ def main():
     end = time.time()
     print(f"Time taken: {end - start:.4f}")
     paramnames = [('w', r'w')]
-    paramnames += [('x%i' % i, r'x_%i' % i) for i in range(free_nodes)]
-    paramnames += [('y%i' % i, r'y_%i' % i) for i in range(num_nodes)]
-    paramnames += [('gw%i*'%i, r'gw_%i' % i) for i in range(len(frequencies))]
-
+    paramnames += [('n1', r'n1'), ('n2', r'n2'), ('logA', r'logA'), ('pstar', r'pstar'), ('sigma', r'sigma')]
+    paramnames += [(f'gw_{i}', f'gw_{i}') for i in range(len(frequencies))]
     output.make_paramnames_files(paramnames)
 
     posterior = output.posterior
@@ -158,8 +179,10 @@ def main():
     g.settings.title_limit_fontsize = 14
     g.settings.axes_fontsize=16
     g.settings.axes_labelsize=18
-    g.plot_1d(posterior, param = 'w', marker=2/3, marker_color=blue, colors=[blue],title_limit=1)
-    g.export(settings.file_root + '_w.pdf')
+    g.triangle_plot(posterior, ['w', 'n1', 'n2','logA','pstar','sigma'], filled=True, 
+                   title_limit=1,markers={'w': 2/3, 'n1': 2, 'n2':-1, 'logA':-2, 'pstar': np.log10(5e-4), 'sigma': 2. })
+    # g.plot_1d(posterior, param = 'w', marker=2/3, marker_color=blue, colors=[blue],title_limit=1)
+    g.export(settings.file_root + '_.pdf')
 
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")

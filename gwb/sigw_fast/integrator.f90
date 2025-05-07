@@ -84,7 +84,6 @@ contains
     allocate(cId(nd))
     cI = 0.0d0
 
-    !$omp parallel do private(j, start_idx, end_idx)
     do i = 1, nd
        cId(i) = 0.0d0
        start_idx = (i-1)*ns + 1
@@ -96,14 +95,11 @@ contains
       !     cI = cI + (cId(i) + cId(i-1))*(cd(i) - cd(i-1))/2.0d0
       !  end if
     end do
-    !$omp end parallel do
 
     cI = 0.0d0
-    !$omp parallel do reduction(+:cI)
     do i = 2, nd
       cI = cI + (cId(i) + cId(i-1)) * (cd(i) - cd(i-1)) / 2.0d0
     end do
-    !$omp end parallel do
 
     deallocate(cId)
   end function sigwint_1
