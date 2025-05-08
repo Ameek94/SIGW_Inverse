@@ -19,5 +19,12 @@ model_files/
 *.so
 .venv
 *.pkl
+<<<<<<< Updated upstream
 *.log
 .DS_Store
+=======
+examples/results/.DS_Store
+examples/.DS_Store
+gwb/.DS_Store
+examples/.DS_Store
+>>>>>>> Stashed changes
