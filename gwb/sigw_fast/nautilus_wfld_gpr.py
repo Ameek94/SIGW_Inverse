@@ -158,15 +158,16 @@ def main():
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = -1.
-    y_min = -7.
-    l_min = abs(left_node - right_node) / num_nodes /2 # 5
+    y_max = 0.
+    y_min = -8.
+    l_min = abs(left_node - right_node) / num_nodes /4   # 5
     l_max = 2 * abs(left_node - right_node) 
-    w_min = 0.4
+    w_min = 0.2
     w_max = 0.99
     log10_f_rh = -5.
 
-    print(f"prior ranges, w: [{w_min}, {w_max}], lengthscale: [{l_min}, {l_max}] nodes: [{left_node}, {right_node}], y: [{y_min}, {y_max}]")
+    print(f"prior ranges, w: [{w_min}, {w_max}], \
+          lengthscale: [{l_min:.2f}, {l_max:.2f}] nodes: [{left_node:.2f}, {right_node:.2f}], y: [{y_min}, {y_max}]")
 
     ndim = 2 + free_nodes + num_nodes
 
@@ -181,13 +182,15 @@ def main():
                             frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
     sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
+                      resume=False,
                       filepath=f'{gwb_model}_w0p66_gp_{num_nodes}.h5',pool=(None,4))
 
     print(f"Running inference for {num_nodes} nodes")
-    success = sampler.run(verbose=True, f_live=0.01,n_like_max=int(1e6),n_eff=400*ndim)
+    start = time.time()
+    success = sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e5),n_eff=400*ndim)
     print(f"Sampling stopped due to convergence: {success}")
     print('log Z: {:.4f}'.format(sampler.log_z))
-
+    print(f"Sampling took {time.time()-start:.2f} seconds")
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
     np.savez(f'{gwb_model}_w0p66_gp_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)

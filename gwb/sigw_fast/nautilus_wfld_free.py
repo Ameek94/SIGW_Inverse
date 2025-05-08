@@ -128,7 +128,7 @@ def main():
     gwb_model = str(sys.argv[1])
     Omegas = data[f'gw_{gwb_model}'] 
     kstar = 1e-3
-    omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
+    omks_sigma = Omegas * (0.01 * (np.log(frequencies / kstar))**2 + 0.1)
     cov = np.diag(omks_sigma**2)
 
     num_nodes = int(sys.argv[2])
@@ -163,7 +163,8 @@ def main():
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_w0p66_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+    np.savez(f'{gwb_model}_w0p66_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt
+             ,logz=sampler.log_z,omegagw=blobs,sigma=omgw_sigma)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 
