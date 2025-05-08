@@ -13,7 +13,7 @@ frequencies = data['frequencies']
 # 1. Specify the grid of w you want to cover
 w_min = 0.0001
 w_max = 0.9999
-N_w = 2500
+N_w = 1800
 w_grid = np.linspace(w_min, w_max, N_w)  # e.g. np.linspace(–2, +2, 1001)
 
 # 2. Open an HDF5 file to write

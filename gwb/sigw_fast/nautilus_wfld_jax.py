@@ -16,6 +16,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 from jax.scipy.linalg import cho_solve, solve_triangular
 import numpyro.distributions as dist
+import h5py
 from numpyro.util import enable_x64
 enable_x64()
 from math import sqrt
@@ -42,6 +43,27 @@ def rbf_kernel(x1,x2,lengthscales,noise=1e-8, include_noise=True):
     if include_noise:
         k+= noise * jnp.eye(len(x1))
     return k
+
+cache_counter = 0
+
+# open once, reuse for all likelihood calls
+h5 = h5py.File("precomputed_kernels.h5", "r")
+w_vals = h5["w_vals"][:]      # load in memory once; it's small
+# kernel datasets stay on disk until you index them
+dset1 = h5["kernel1"]
+dset2 = h5["kernel2"]
+tol = 1e-2
+
+def get_kernels_from_file(w):
+    # find index of the closest precomputed w
+    idx = np.abs(w_vals - w).argmin()
+    # print(f"Closest precomputed w: {w_vals[idx]:.6f} (target: {w:.6f})")
+    if abs(w_vals[idx] - w) > tol:
+        raise ValueError(f"No precomputed w within ±{tol}: nearest is {w_vals[idx]:.6f}")
+    # pull the two rows
+    k1 = dset1[idx, :]
+    k2 = dset2[idx, :]
+    return k1, k2
 
 def get_kernels(w, d1array, s1array, d2array, s2array, tolerance=5):
     global cache_counter
@@ -125,8 +147,9 @@ def compute_single_f(f,
     return res
 
 
-def compute_w(w,log10_f_rh,nodes,vals,lengthscale,frequencies,nd=150,fref=1.):
-
+def compute_w(w,log10_f_rh,nodes,vals,lengthscale,frequencies,nd=150,fref=1.,kernels_from_file=True):
+    # global kernel_cache
+    global cache_counter
     # standardise the input data
     vals_mean = jnp.mean(vals)
     vals_std = jnp.std(vals)
@@ -144,7 +167,22 @@ def compute_w(w,log10_f_rh,nodes,vals,lengthscale,frequencies,nd=150,fref=1.):
 
     nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
     b = sd.beta(w)
-    kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
+
+    if kernels_from_file:
+        try:
+            kernel1, kernel2 = get_kernels_from_file(w,)
+            cache_counter += 1
+        except:
+            # If the kernel is not found in the file, compute it
+            kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
+    else:
+        kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
+
+
+
+    # nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
+    # b = sd.beta(w)
+    # kernel1, kernel2 = get_kernels(w, d1array, s1array, d2array, s2array)
 
     # convert to jax arrays
     darray = jnp.array(darray)
@@ -191,6 +229,34 @@ def compute_w(w,log10_f_rh,nodes,vals,lengthscale,frequencies,nd=150,fref=1.):
     OmegaGW = norm * Integral
     return OmegaGW
 
+def jax_prior(cube,
+          w_min, w_max,
+          free_nodes,
+          left_node, right_node,
+          y_min, y_max,
+          l_min, l_max):
+    # unpack & rescale w and l
+    w = cube[0] * (w_max - w_min) + w_min
+    l = cube[1] * (l_max - l_min) + l_min
+
+    # extract raw xs and ys
+    xs_raw = cube[2:2 + free_nodes]         # shape (N,)
+    ys     = cube[2 + free_nodes:] \
+               * (y_max - y_min) + y_min
+
+    # vectorized computation of t[n] = prod_{k=n..N-1} xs_raw[k]**(1/(k+1))
+    # 1) build exponents 1/(i+1)
+    exponents = 1.0 / jnp.arange(1, free_nodes + 1)   # [1/1, 1/2, …, 1/N]
+    # 2) form factors xs_raw**exponents
+    factors = xs_raw ** exponents                     # shape (N,)
+    # 3) reverse‐cumprod and then reverse back
+    t = jnp.cumprod(factors[::-1])[::-1]              # shape (N,)
+
+    # scale into [left_node, right_node]
+    xs = t * (right_node - left_node) + left_node
+
+    # pack everything and return
+    return jnp.concatenate([jnp.array([w, l]), xs, ys])
 
 def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max, l_min,l_max):
     params = cube.copy()
@@ -209,7 +275,7 @@ def prior(cube, w_min, w_max,free_nodes, left_node,right_node, y_min, y_max, l_m
     ys = ys * (y_max - y_min) + y_min
     return np.concatenate([[w],[l],xs, ys])
 
-def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, cov):
+def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, omks_sigma):
     w = params[0]
     lengthscale = 10**(params[1])
     nodes = params[2:free_nodes+2]
@@ -218,9 +284,9 @@ def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies,
     # print(f"vals shape ll: {vals.shape}")
     omegagw = compute_w(w, log10_f_rh, nodes, vals, lengthscale, frequencies, nd=nd)
     diff = omegagw - Omegas
-    ll = -0.5 * np.dot(diff, np.linalg.solve(cov, diff))
-    lengthscale_prior = dist.LogNormal(loc=sqrt2,scale=sqrt3).log_prob(lengthscale)
-    return ll+lengthscale_prior, omegagw
+    ll = -0.5 * np.sum(diff**2 / omks_sigma**2)
+    # lengthscale_prior = dist.LogNormal(loc=sqrt2,scale=sqrt3).log_prob(lengthscale)
+    return ll, omegagw
 
 
 def main():
@@ -240,15 +306,24 @@ def main():
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = 0.
-    y_min = -8.
-    l_min = np.log10(0.05)
-    l_max = 1.
-    w_min = 0.1
-    w_max = 0.9
+    y_max = -1.
+    y_min = -7.
+    l_min = np.log10(1 / num_nodes)
+    l_max = np.log10(10)
+    w_min = 0.4
+    w_max = 0.99
     log10_f_rh = -5.
 
     ndim = 2 + free_nodes + num_nodes
+
+    prior_transform_jax = lambda cube: jax_prior(cube,
+        w_min=w_min, w_max=w_max,
+        free_nodes=free_nodes,
+        left_node=left_node, right_node=right_node,
+        y_min=y_min, y_max=y_max,
+        l_min=l_min, l_max=l_max)
+    
+    # prior_transform = jax.jit(prior_transform_jax)
 
     prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
                               free_nodes=free_nodes,
@@ -258,13 +333,13 @@ def main():
     
     loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, 
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
-                            frequencies=frequencies, Omegas=Omegas, cov=cov)
+                            frequencies=frequencies, Omegas=Omegas, omks_sigma=omks_sigma)
 
     sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
-                      filepath=f'{gwb_model}_w0p66_gp_{num_nodes}.h5',pool=(None,8))
+                      filepath=f'{gwb_model}_w0p66_gp_{num_nodes}.h5',pool=(None,4))
 
     print(f"Running inference for {num_nodes} nodes")
-    sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
+    sampler.run(verbose=True, f_live=0.01,n_like_max=int(1e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
