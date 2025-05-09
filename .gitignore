@@ -20,11 +20,17 @@ model_files/
 .venv
 *.pkl
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 *.log
 .DS_Store
 =======
+=======
+>>>>>>> Stashed changes
 examples/results/.DS_Store
 examples/.DS_Store
 gwb/.DS_Store
 examples/.DS_Store
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
