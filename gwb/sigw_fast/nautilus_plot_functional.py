@@ -22,6 +22,13 @@ matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 blue = '#006FED'
 
+if len(sys.argv) < 4:
+    print("Usage: python nautilus_plot_functional.py <w> <num_nodes> <gwb_model>")
+    print("w: 0.5, 0.66, 0.99")
+    print("num_nodes: number of nodes in the spline")
+    print("gwb_model: 'bpl' or 'peaked' or 'osc' ")
+    sys.exit(1)
+
 def weighted_median(data, weights):
     """Compute the weighted median of data."""
     s_data, s_weights = map(np.array, zip(*sorted(zip(data, weights))))
@@ -98,12 +105,12 @@ if __name__ == "__main__":
     elif w == 0.99:
         data = np.load('./spectra_0p99_interp.npz')
         save_file = '0p99'
-    elif w = 0.66:
+    elif w==0.66:
         data = np.load('./spectra_0p66_interp.npz')
         save_file = '0p66'
 
     frequencies = data['frequencies']
-    gwb_model = 'bpl'
+    gwb_model = str(sys.argv[3])
     Omegas = data[f'gw_{gwb_model}']
     kstar = 1e-3
     omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
@@ -117,7 +124,7 @@ if __name__ == "__main__":
     num_nodes = int(sys.argv[2])
 
     # Load samples
-    sample_data = np.load(f'{gwb_model}_{save_file}_free_{num_nodes}.npz')
+    sample_data = np.load(f'{gwb_model}_{save_file}_interp_free_{num_nodes}.npz')
     samples = sample_data['samples']
     logwt = sample_data['logwt']
     logl = sample_data['logl']
@@ -141,8 +148,8 @@ if __name__ == "__main__":
     for x in ax:
         secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
         secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$", labelpad=10)
-    plt.show()
     plt.savefig(f'{gwb_model}_{save_file}_{num_nodes}_posterior.pdf', bbox_inches='tight')
+    plt.show()
 
     # Plot 1D posterior
     names = ['w']
@@ -151,13 +158,14 @@ if __name__ == "__main__":
     ranges = dict(zip(names,bounds))
     print(ranges)
     gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=weights)
-    g = plots.get_subplot_plotter(subplot_size=3.5)
+    g = plots.get_subplot_plotter(subplot_size=6,subplot_size_ratio=2/3)
     blue = '#006FED'
     g.settings.title_limit_fontsize = 14
     g.settings.axes_fontsize=16
-    g.settings.axes_labelsize=18
+    g.settings.axes_labelsize=16
     g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=2)
-    g.export(f'{gwb_model}_wfld_{save_file}_{num_nodes}_1D_w.pdf')
+    # plt.show()
+    g.export(f'{gwb_model}_{save_file}_{num_nodes}_1D_w.pdf')
     ax = g.subplots[0,0]
     ax.set_xlim(w - 0.2, 1.0)
     print(gd_samples.getMargeStats())

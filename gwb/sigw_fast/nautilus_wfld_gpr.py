@@ -69,7 +69,7 @@ def compute_w(w,log10_f_rh,nodes,vals,lengthscale,
     gaussian_process = GaussianProcessRegressor(kernel=gpkernel, optimizer=None, normalize_y=True)
     gaussian_process.fit(nodes.reshape(-1, 1),vals)
 
-    interp_nodes = np.linspace(nodes[0], nodes[-1], 100)
+    interp_nodes = np.linspace(nodes[0], nodes[-1], 150)
     interp_vals = gaussian_process.predict(interp_nodes.reshape(-1, 1))
 
     # print(f"Shapes interpolated nodes and vals: {interp_nodes.shape}, {interp_vals.shape}")
@@ -160,8 +160,8 @@ def main():
     right_node = np.log10(pk_max)
     y_max = 0.
     y_min = -8.
-    l_min = abs(left_node - right_node) / num_nodes /4   # 5
-    l_max = 2 * abs(left_node - right_node) 
+    l_min = abs(left_node - right_node) / num_nodes / 8  # 5
+    l_max = abs(left_node - right_node)  # 2 * 
     w_min = 0.2
     w_max = 0.99
     log10_f_rh = -5.
