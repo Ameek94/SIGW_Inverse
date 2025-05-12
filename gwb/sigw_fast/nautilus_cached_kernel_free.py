@@ -163,7 +163,7 @@ def main():
     sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
                       filepath=f'{gwb_model}_{data_file}_free_{num_nodes}.h5',pool=(None,4))
 
-    sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e6))
+    sampler.run(verbose=True, f_live=0.001,n_like_max=int(5e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)

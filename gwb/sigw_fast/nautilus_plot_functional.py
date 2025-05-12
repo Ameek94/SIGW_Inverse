@@ -154,7 +154,7 @@ if __name__ == "__main__":
     # Plot 1D posterior
     names = ['w']
     labels = ['w']
-    bounds = [[0.1,1.]]
+    bounds = [[0.1,0.99]]
     ranges = dict(zip(names,bounds))
     print(ranges)
     gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=weights)

@@ -57,16 +57,10 @@ def compute_pz(k,samples,num_nodes,left_node,right_node):
     Pz = []
     num_free_nodes = num_nodes - 2
     for sample in tqdm.tqdm(samples,desc='Pz'):
-        free_nodes = sample[2:num_free_nodes+2]
-        lengthscale = sample[1]
+        free_nodes = sample[1:num_free_nodes+1]
         nodes = np.pad(free_nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-        vals = sample[num_free_nodes+2:]
-        gpkernel = 1 * RBF(length_scale=lengthscale, length_scale_bounds="fixed") #+ np.eye(len(nodes)) * 1e-10
-        gaussian_process = GaussianProcessRegressor(kernel=gpkernel, optimizer=None, normalize_y=True)
-        gaussian_process.fit(nodes.reshape(-1, 1),vals)
-        interp_nodes = np.linspace(nodes[0], nodes[-1], 100)
-        interp_vals = gaussian_process.predict(interp_nodes.reshape(-1, 1))
-        res = gw.power_spectrum_k_array(interp_nodes, interp_vals, k)
+        vals = sample[num_free_nodes+1:]
+        res = gw.power_spectrum_k_array(nodes, vals, k)
         Pz.append(res)
     return np.array(Pz)
 
@@ -132,7 +126,7 @@ num_thinned_samples = int(sys.argv[2])
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
 
 # Check current working directory for files matching the pattern
-pattern = re.compile(rf'{gwb_model}_w0p66_gp_(\d+)\.npz')
+pattern = re.compile(rf'{gwb_model}_0p66_interp_free_(\d+)\.npz')
 
 # List all files in the current working directory
 files_in_dir = os.listdir(os.getcwd())
@@ -174,6 +168,8 @@ if matching_files:
         logweight = np.ones(len(thinned_samples)) * logz
         print(f"pz_samples shape: {pz.shape}, gwb_samples shape: {omegagw.shape}, logweight shape: {logweight.shape}")
         logweights.append(logweight)
+else:
+    print("No matching files found.")
 
 # no renormalise the logweights
 logweights = np.concatenate(logweights)
@@ -197,7 +193,7 @@ for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./{gwb_model}_0p66_gp_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'./{gwb_model}_0p66_posterior.pdf',bbox_inches='tight')
 # plt.show()
 
 w = 0.66
@@ -219,7 +215,7 @@ g.settings.title_limit_fontsize = 14
 g.settings.axes_fontsize=16
 g.settings.axes_labelsize=16
 g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=2)
-g.export(f'{gwb_model}_0p66_gp_1D_w.pdf')
+g.export(f'{gwb_model}_0p66_1D_w.pdf')
 ax = g.subplots[0,0]
 ax.set_xlim(0.2, 1.0)
 print(gd_samples.getMargeStats())
@@ -246,5 +242,5 @@ ax.set_ylim(y_min, y_max)
 ax.set_xlim(min(N_nodes) - 0.5, max(N_nodes) + 0.5)
 for x, y in zip(N_nodes, logz_list):
     plt.text(x+0.1, y-2, f'({y:.2f})', fontsize=12, ha='center', va='bottom')
-plt.savefig(f'{gwb_model}_gp_logz.pdf',bbox_inches='tight')
+plt.savefig(f'{gwb_model}_0p66_logz.pdf',bbox_inches='tight')
 # plt.show()

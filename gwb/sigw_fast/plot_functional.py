@@ -193,11 +193,11 @@ ranges = dict(zip(names,bounds))
 print(ranges)
 # gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=normalized_weights,loglikes=logl)
 gd_samples = MCSamples(samples=equal_samples[:,0], names=names, labels=labels,ranges=ranges,)
-g = plots.get_subplot_plotter(subplot_size=3.5)
+g = plots.get_subplot_plotter(subplot_size=6,subplot_size_ratio=2/3)
 blue = '#006FED'
 g.settings.title_limit_fontsize = 14
 g.settings.axes_fontsize=16
-g.settings.axes_labelsize=18
+g.settings.axes_labelsize=16
 g.plot_1d(gd_samples, 'w', marker=w, marker_color=blue, colors=[blue],title_limit=2)
 g.export(f'{gwb_model}_wfld_0p66_{num_nodes}_1D_w.pdf')
 
