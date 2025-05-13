@@ -142,8 +142,8 @@ def main():
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = -1.
-    y_min = -7.
+    y_max = 0.
+    y_min = -8.
 
     w_min = 0.3
     w_max = 0.99
@@ -160,11 +160,12 @@ def main():
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,
+    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,resume=True,
                       filepath=f'{gwb_model}_{data_file}_free_{num_nodes}.h5',pool=(None,4))
 
-    sampler.run(verbose=True, f_live=0.001,n_like_max=int(5e6))
+    success = sampler.run(verbose=True, f_live=0.002,n_like_max=int(1e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
+    print(f"Sampler stopped due to convergence: {success}")
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")

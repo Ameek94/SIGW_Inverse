@@ -196,7 +196,7 @@ for x in ax:
 plt.savefig(f'./{gwb_model}_0p66_posterior.pdf',bbox_inches='tight')
 # plt.show()
 
-w = 0.66
+w = 2/3
 names = ['w']
 labels = ['w']
 bounds = [[0.2,0.99]]

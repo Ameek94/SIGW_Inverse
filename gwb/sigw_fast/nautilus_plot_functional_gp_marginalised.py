@@ -198,9 +198,9 @@ for x in ax:
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
 plt.savefig(f'./{gwb_model}_0p66_gp_posterior.pdf',bbox_inches='tight')
-# plt.show()
+# plt.show()    
 
-w = 0.66
+w = 2/3
 names = ['w']
 labels = ['w']
 bounds = [[0.2,0.99]]

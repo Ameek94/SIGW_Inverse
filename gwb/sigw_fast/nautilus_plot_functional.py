@@ -36,7 +36,8 @@ def weighted_median(data, weights):
     idx = np.searchsorted(cdf, 0.5)
     return s_data[idx]
 
-def resample_equal(samples, logl, logwt, rstate):
+# resample to get equal weights
+def resample_equal(samples, aux, logwt, rstate):
     wt = np.exp(logwt)
     weights = wt / wt.sum()
     cumulative_sum = np.cumsum(weights)
@@ -53,8 +54,8 @@ def resample_equal(samples, logl, logwt, rstate):
             j += 1
     perm = rstate.permutation(nsamples)
     resampled_samples = samples[idx][perm]
-    resampled_logl = logl[idx][perm]
-    return resampled_samples, resampled_logl
+    resampled_aux = aux[idx][perm]
+    return resampled_samples, resampled_aux
 
 def plot_functional_posterior(vals,samples,k_arr = [], intervals=[99.7, 95., 68.],weights=None,
                               ylabels=[r'$P_{\zeta}$', r'$\Omega_{\rm GW}$'],
@@ -76,9 +77,9 @@ def plot_functional_posterior(vals,samples,k_arr = [], intervals=[99.7, 95., 68.
             y_low, y_high = np.percentile(y,[50-interval/2,50+interval/2],axis=0,weights=weights,
                                           method='inverted_cdf')
             ax[i].fill_between(k_arr[i],y_low,y_high,color=interval_cols[j])
-        medians = np.apply_along_axis(weighted_median, 0, val, weights)
-        ax[i].plot(k_arr[i], medians, color='#006FED', lw=2.5)
-        # ax[i].plot(k_arr[i],np.median(y,axis=0),color=blue,lw=2)
+        # medians = np.apply_along_axis(weighted_median, 0, val, weights)
+        # ax[i].plot(k_arr[i], medians, color='#006FED', lw=2.5)
+        ax[i].plot(k_arr[i],np.median(y,axis=0),color=blue,lw=2)
         ax[i].set_ylabel(ylabels[i])
     for x in ax:
         x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
@@ -135,11 +136,21 @@ if __name__ == "__main__":
 
     print(f"Shapes: {samples.shape}, {logwt.shape}, {logl.shape}, {omegagw.shape}")
 
+    # Resample to get equal weights
+    equal_samples, equal_omegagw = resample_equal(samples, omegagw, logwt, np.random.RandomState(42))
+    print(f"Shapes after resampling: {equal_samples.shape}, {equal_omegagw.shape}")
+    idxs = np.arange(equal_samples.shape[0])
+    num_thinned_samples = int(sys.argv[4])
+    thinned_samples_idxs = np.random.choice(idxs, num_thinned_samples, replace=False)
+    thinned_samples = equal_samples[thinned_samples_idxs]
+    thinned_weights = np.ones(num_thinned_samples)
+    thinned_omegagw = equal_omegagw[thinned_samples_idxs]
+
     # Compute Pz
-    pz_amps = compute_pz(p_arr, samples, num_nodes, left_node, right_node)
+    pz_amps = compute_pz(p_arr, thinned_samples, num_nodes, left_node, right_node)
 
     # Plot posterior
-    fig, ax = plot_functional_posterior([pz_amps, omegagw], samples, [p_arr, frequencies], weights=weights)
+    fig, ax = plot_functional_posterior([pz_amps, thinned_omegagw], thinned_samples, [p_arr, frequencies], weights=thinned_weights)
     ax[0].loglog(pk_arr, pz_amp, color='k', lw=1.5)
     ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
     ax[1].errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt='o', color='k', capsize=4., alpha=0.5, markersize=2)
@@ -154,7 +165,7 @@ if __name__ == "__main__":
     # Plot 1D posterior
     names = ['w']
     labels = ['w']
-    bounds = [[0.1,0.99]]
+    bounds = [[0.3,0.99]]
     ranges = dict(zip(names,bounds))
     print(ranges)
     gd_samples = MCSamples(samples=samples[:,0], names=names, labels=labels,ranges=ranges,weights=weights)

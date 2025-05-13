@@ -187,7 +187,7 @@ def main():
 
     print(f"Running inference for {num_nodes} nodes")
     start = time.time()
-    success = sampler.run(verbose=True, f_live=0.01,n_like_max=int(2e5),n_eff=400*ndim)
+    success = sampler.run(verbose=True, f_live=0.002,n_like_max=int(1e6),n_eff=400*ndim)
     print(f"Sampling stopped due to convergence: {success}")
     print('log Z: {:.4f}'.format(sampler.log_z))
     print(f"Sampling took {time.time()-start:.2f} seconds")
