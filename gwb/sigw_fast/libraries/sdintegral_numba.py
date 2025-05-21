@@ -3,7 +3,7 @@
 # Originally written by [Lukas T. Witkowski].
 # MIT License
 # Copyright (c) 2022 Lukas T. Witkowski
-# Modifications have been made by Ameek Malhotra.
+# Modifications have been made by Ameek Malhotra. (https://numba.pydata.org/numba-doc/dev/user/parallel.html)
 
 
 import numpy as np

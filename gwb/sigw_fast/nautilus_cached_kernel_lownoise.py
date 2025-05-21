@@ -12,6 +12,13 @@ from getdist import plots, MCSamples
 import math
 import h5py
 from scipy.special import logsumexp
+# Set matplotlib parameters
+font = {'size': 16, 'family': 'serif'}
+matplotlib.rc('font', **font)
+matplotlib.rc('text', usetex=True)
+matplotlib.rc('legend', fontsize=16)
+blue = '#006FED'
+
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
 rd_norm = CG * OMEGA_R 

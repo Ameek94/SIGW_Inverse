@@ -126,7 +126,7 @@ num_thinned_samples = int(sys.argv[2])
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
 
 # Check current working directory for files matching the pattern
-pattern = re.compile(rf'{gwb_model}_0p66_interp_free_(\d+)\.npz')
+pattern = re.compile(rf'{gwb_model}_w0p66_free_(\d+)\.npz')
 
 # List all files in the current working directory
 files_in_dir = os.listdir(os.getcwd())
@@ -178,22 +178,25 @@ gwb_samples = np.concatenate(gwb_samples)
 pz_samples = np.concatenate(pz_samples)
 ws = np.concatenate(ws)
 
+pz_fac = 4e-1
+gw_fac = pz_fac**2
+
 print(f"pz_samples shape: {pz_samples.shape}, gwb_samples shape: {gwb_samples.shape}, weights shape: {weights.shape}")
 
-fig, ax = plot_functional_posterior([pz_samples,gwb_samples],
+fig, ax = plot_functional_posterior([pz_fac*pz_samples,gw_fac*gwb_samples],
                                     k_arr=[p_arr_local, frequencies],
                                     weights = weights,
                                     aspect_ratio=(6,4.5))
-ax[0].loglog(pk_arr, pz_amp, color='k', lw=1.5)
-ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
-ax[1].errorbar(frequencies, Omegas, yerr=np.sqrt(np.diag(cov)), fmt='o', color='k', capsize=4.,alpha=0.5,markersize=2)
+ax[0].loglog(pk_arr, pz_fac*pz_amp, color='k', lw=1.5)
+ax[1].loglog(frequencies, gw_fac*Omegas, color='k', lw=1.5, label='Truth')
+ax[1].errorbar(frequencies, gw_fac*Omegas, yerr=gw_fac * np.sqrt(np.diag(cov)), fmt='o', color='k', capsize=4.,alpha=0.5,markersize=2)
 ax[1].legend()
 k_mpc_f_hz = 2*np.pi * 1.03 * 10**14
 for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
-plt.savefig(f'./{gwb_model}_0p66_posterior.pdf',bbox_inches='tight')
+plt.savefig(f'./{gwb_model}_0p66_posterior_pres.pdf',bbox_inches='tight')
 # plt.show()
 
 w = 2/3
