@@ -8,3 +8,8 @@
 *.npz
 *.ipynb_checkpoints
 *.code-workspace
+__pycache__/
+*.so
+*.h5
+*.npz
+*.save
