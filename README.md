@@ -9,4 +9,4 @@ If you use this code in your works please cite our paper
 ```
 
 
-Please also cite [SIGWAY](https://github.com/jonaselgammal/SIGWAY/tree/main) and [SIGWFast](https://github.com/Lukas-T-W/SIGWfast) depending on which method you use to calculate the scalar induced gravitational wave background. 
+Please also cite [SIGWAY](https://github.com/jonaselgammal/SIGWAY/tree/main) and [SIGWFast](https://github.com/Lukas-T-W/SIGWfast) depending on which method you use to calculate the scalar induced gravitational wave background. If you use any of the nested sampling routines, consider also citing them.
