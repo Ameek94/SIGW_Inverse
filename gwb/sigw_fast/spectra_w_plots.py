@@ -47,7 +47,7 @@ def compute_w(w,log10_f_rh,func,num_nodes,pk_arr,frequencies,use_mp=False,nd=150
     return OmegaGW
 
 
-def bpl(p, pstar=5e-4, n1=2, n2=-1, sigma=10.):
+def bpl(p, pstar=5e-4, n1=2, n2=-1, sigma=2.):
     nir = n1
     pl1 = (p / pstar) ** nir
     nuv = (n2 - n1) / sigma
@@ -60,8 +60,8 @@ pk_min, pk_max = np.array(min(frequencies)/fac), np.array(max(frequencies)*fac)
 pk_arr = np.geomspace(pk_min, pk_max, 250)
 num_nodes = 150
 
-omgw_bpl_RD = compute_w(1/3,log10_f_rh,bpl,num_nodes,pk_arr,frequencies,nd=150)
-omgw_bpl_w0p8 = compute_w(0.8,log10_f_rh,bpl,num_nodes,pk_arr,frequencies,nd=150)
+omgw_bpl_RD = compute_w(0.2,log10_f_rh,bpl,num_nodes,pk_arr,frequencies,nd=150)
+omgw_bpl_w0p8 = compute_w(0.9,log10_f_rh,bpl,num_nodes,pk_arr,frequencies,nd=150)
 
 
 # plot
@@ -69,17 +69,25 @@ fig, ax = plt.subplots(1,2,figsize=(12,4),constrained_layout=True)
 
 ax[0].loglog(pk_arr,bpl(pk_arr)/max(bpl(pk_arr)),color='k')
 
-ax[1].loglog(frequencies,omgw_bpl_RD / max(omgw_bpl_RD),label=r'$w=1/3$',color='C0')
+w=0.2
+ax[1].loglog(frequencies,omgw_bpl_RD / max(omgw_bpl_RD),label=rf'$w={{w}}$',color='C0')
 f_at_max = frequencies[np.argmax(bpl(frequencies))]
 f_cut = frequencies[frequencies < f_at_max]
 gw_at_max = omgw_bpl_RD[np.argmax(bpl(frequencies))] / max(omgw_bpl_RD)
-ax[1].loglog(f_cut,gw_at_max * np.log(f_cut/f_at_max)**2 * (f_cut/f_at_max)**3,label=r'$IR$',color='C0',ls='--')
+b = (1-3*w)/(1+3*w)
+# b = (1-3*0.5)/(1+3*0.5)
+print(f'ir = {3-2*abs(b)}')
+ax[1].loglog(frequencies, (frequencies/frequencies[0])**(3 -2*abs(b)) * omgw_bpl_RD[0]/ max(omgw_bpl_RD),color='C0',ls='--')
+# ax[1].loglog(f_cut,gw_at_max  * (f_cut/f_at_max)**(3 - 2*abs(b)),label=r'$IR$',color='C0',ls='--') # * np.log(f_cut/f_at_max)**2
 f_at_max = frequencies[np.argmax(bpl(frequencies))]
 f_cut = frequencies[frequencies < f_at_max]
-gw_at_max = omgw_bpl_RD[np.argmax(bpl(frequencies))] / max(omgw_bpl_w0p8)
-b = (1-3*0.8)/(1+3*0.8)
-ax[1].loglog(frequencies,omgw_bpl_w0p8/ max(omgw_bpl_w0p8),label=r'$w=0.8$',color='C1')
-ax[1].loglog(f_cut,gw_at_max * np.log(f_cut/f_at_max)**2 * (f_cut/f_at_max)**(3 -2*abs(b)),label=r'$IR$',color='C1',ls='--')
+gw_at_max = omgw_bpl_w0p8[np.argmax(bpl(frequencies))] / max(omgw_bpl_w0p8) #omgw_bpl_RD[np.argmax(bpl(frequencies))] / max(omgw_bpl_w0p8)
+w = 0.9
+b = (1-3*w)/(1+3*w)
+print(f'ir = {3-2*abs(b)}')
+ax[1].loglog(frequencies,omgw_bpl_w0p8/ max(omgw_bpl_w0p8),label=rf'$w={{w}}$',color='C1')
+# ax[1].loglog(f_cut,gw_at_max * (f_cut/f_at_max)**(3 -2*abs(b)),label=r'$IR$',color='C1',ls='--') #* np.log(f_cut/f_at_max)**2 * 
+ax[1].loglog(frequencies, (frequencies/frequencies[0])**(3 -2*abs(b)) * omgw_bpl_w0p8[0]/ max(omgw_bpl_w0p8),color='C1',ls='--')
 ax[1].legend()
 ylabels = [r'$P_{\zeta}$', r'$\Omega_{\rm GW}$']
 for x in ax:

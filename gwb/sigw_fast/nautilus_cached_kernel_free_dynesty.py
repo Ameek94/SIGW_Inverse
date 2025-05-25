@@ -7,7 +7,7 @@ from sigwfast import sigwfast_mod as gw
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
-from nautilus import Sampler
+from dynesty import DynamicNestedSampler
 import math
 import h5py
 import jax
@@ -101,7 +101,9 @@ def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies,
     omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, use_mp=False, nd=nd,kernels_from_file=True)
     diff = (omegagw - Omegas)
     ll = -0.5 * np.sum(diff**2 / omgw_sigma**2)
-    # print(f"likelihood took {time.time()-start:.2f} seconds")
+    ll = np.nan_to_num(ll, nan=-1e10, posinf=1e10, neginf=-1e10)
+    ll = np.clip(ll, -1e10, 1e10)
+    # print(f"likelihood took {time.time()-start:.2f} seconds with value: {ll:.8f}")
     return ll, omegagw
 
 def resample_equal(samples, logl, logwt, rstate):
@@ -126,8 +128,7 @@ def resample_equal(samples, logl, logwt, rstate):
 
 def main():
     # Load the gwb data from file
-    data_file = str(sys.argv[3])
-    data = np.load(f'./spectra_{data_file}.npz')
+    data = np.load(f'./spectra_0p66_interp.npz')
     frequencies = data['frequencies']
     gwb_model = str(sys.argv[2])
     Omegas = data[f'gw_{gwb_model}']
@@ -160,17 +161,25 @@ def main():
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
                             frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
-    sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,resume=True,
-                      n_live = 4000,
-                      filepath=f'{gwb_model}_{data_file}_free_{num_nodes}.h5',pool=(None,4))
+    sampler = DynamicNestedSampler(loglikelihood, prior_transform, ndim,blob=True,
+                                   nlive = 10000,sample='rwalk',
+                                )
 
-    success = sampler.run(verbose=True, f_live=0.01,n_like_max=int(1e6))
-    print('log Z: {:.4f}'.format(sampler.log_z))
-    print(f"Sampler stopped due to convergence: {success}")
-
-    samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
+    start = time.time()
+    sampler.run_nested(dlogz_init=0.01, print_progress=True,maxcall=int(5e6),resume=False
+                       ,checkpoint_file='{gwb_model}_w0p66_free_dynesty_{num_nodes}.save')
+    end = time.time()
+    print(f"Total time taken: {end - start:.2f} seconds")
+    res = sampler.results  # type: ignore # grab our results
+    mean = res['logz'][-1]
+    logz_err = res['logzerr'][-1]
+    print(f"Mean logz: {mean:.4f} +/- {logz_err:.4f}")
+    samples = res['samples']
+    logwt = res['logwt']
+    logl = res['logl']
+    blobs = res['blob']
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_{data_file}_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+    np.savez(f'{gwb_model}_0p66_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

@@ -12,6 +12,7 @@ import math
 import h5py
 import jax
 jax.config.update("jax_enable_x64", True)
+from mpi4py.futures import MPIPoolExecutor
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -129,23 +130,23 @@ def main():
     data_file = str(sys.argv[3])
     data = np.load(f'./spectra_{data_file}.npz')
     frequencies = data['frequencies']
-    gwb_model = str(sys.argv[2])
+    gwb_model = str(sys.argv[1])
     Omegas = data[f'gw_{gwb_model}']
     kstar = 1e-3
     omks_sigma = Omegas * (0.05 * (np.log(frequencies / kstar))**2 + 0.1)
     cov = np.diag(omks_sigma**2)
 
-    num_nodes = int(sys.argv[1])
+    num_nodes = int(sys.argv[2])
     free_nodes = num_nodes - 2
     pk_arr = data['pk_arr']
     pk_min, pk_max = min(pk_arr), max(pk_arr)
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = 0.
-    y_min = -8.
+    y_max = -1.
+    y_min = -7.
 
-    w_min = 0.3
+    w_min = 0.33
     w_max = 0.99
     log10_f_rh = -5.
 
@@ -161,16 +162,16 @@ def main():
                             frequencies=frequencies, Omegas=Omegas, omgw_sigma=omks_sigma)
 
     sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,resume=True,
-                      n_live = 4000,
-                      filepath=f'{gwb_model}_{data_file}_free_{num_nodes}.h5',pool=(None,4))
+                      n_live = 5000,
+                      filepath=f'{gwb_model}_{data_file}_free_{num_nodes}_mpi.h5',pool=MPIPoolExecutor())
 
-    success = sampler.run(verbose=True, f_live=0.01,n_like_max=int(1e6))
+    success = sampler.run(verbose=True, f_live=0.002,n_like_max=int(1e6))
     print('log Z: {:.4f}'.format(sampler.log_z))
     print(f"Sampler stopped due to convergence: {success}")
 
     samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
     print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_{data_file}_free_{num_nodes}.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+    np.savez(f'{gwb_model}_{data_file}_free_{num_nodes}_mpi.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
     print("Nested sampling complete")
     print(f"Cached kernel was used {cache_counter} times")
 

@@ -12,6 +12,8 @@ from matplotlib import cm, colors
 data = np.load('./bpl_data.npz')
 frequencies = data['k']
 
+# frequencies = np.geomspace(min(frequencies),max(frequencies),500)
+
 w = 0.99
 log10_f_rh = -5.
 
@@ -69,8 +71,8 @@ pk_arr = np.geomspace(pk_min, pk_max, 250)
 num_nodes = 150
 
 omgw_bpl = compute_w(w,log10_f_rh,bpl,num_nodes,pk_arr,frequencies,nd=150)
-omgw_peaked = compute_w(w,log10_f_rh,peaked,num_nodes,pk_arr,frequencies,nd=200)
-omgw_osc = compute_w(w,log10_f_rh,osc,num_nodes,pk_arr,frequencies,nd=200)
+omgw_peaked = compute_w(w,log10_f_rh,peaked,num_nodes,pk_arr,frequencies,nd=250)
+omgw_osc = compute_w(w,log10_f_rh,osc,num_nodes,pk_arr,frequencies,nd=250)
 
 # omgw_bpl = compute(bpl,frequencies,nd=150,w=w,f_rh=f_rh,Use_Cpp=False)
 # omgw_peaked = compute(peaked,frequencies,nd = 500,w=w,f_rh=f_rh,Use_Cpp=False)
