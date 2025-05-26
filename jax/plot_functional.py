@@ -24,6 +24,10 @@ matplotlib.rc('text', usetex=True)
 matplotlib.rc('legend', fontsize=16)
 
 
+if len(sys.argv) < 3:
+    print("Usage: python plot_functional.py <model> <num_samples>")
+    sys.exit(1)
+
 model = str(sys.argv[1])
 # Load the gravitational wave background data.
 data = np.load(f'./{model}_data.npz')
@@ -58,7 +62,7 @@ def interpolate(nodes, vals, x):
     res = jnp.where(x > right_node, 0, res)
     return res
 
-# thinning the samples if needed
+# thinning the samples, use ~10000 for decent plots
 num_samples = int(sys.argv[2])
 
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
@@ -77,11 +81,12 @@ pattern = re.compile(rf'nautilus_{model}_(\d+)_linear_nodes\.npz')
 files_in_dir = os.listdir(os.getcwd())
 
 # Filter files matching the pattern where n > 2
-matching_files = [f for f in files_in_dir if pattern.match(f) and int(pattern.match(f).group(1)) >= 2]
+matching_files = [f for f in files_in_dir if pattern.match(f) and int(pattern.match(f).group(1)) > 2]
 logz_list = []
 logweights = []
 gwb_samples = []
 pz_samples = []
+Num_nodes = []
 if matching_files:
     print("Matching files found:")
     for file in matching_files:
@@ -102,12 +107,13 @@ if matching_files:
         pz = split_vmap(get_pz, (xs, ys), batch_size=100)[0]
         pz_samples.append(pz)
         gwb_samples.append(omegagw)
+        Num_nodes.append(n)
         logz_list.append(logz)
         logweight = np.ones(len(xs)) * logz
         print(f"pz_samples shape: {pz.shape}, gwb_samples shape: {omegagw.shape}, logweight shape: {logweight.shape}")
         logweights.append(logweight)
 
-# no renormalise the logweights
+# now renormalise the logweights
 logweights = np.concatenate(logweights)
 weights = renormalise_log_weights(logweights)
 gwb_samples = np.concatenate(gwb_samples)
@@ -129,3 +135,30 @@ for x in ax:
     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz, lambda x: x / k_mpc_f_hz))
     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$",labelpad=10) 
 plt.savefig(f'./nautilus_{model}_linear_posterior.pdf',bbox_inches='tight')
+
+
+# Plot the logZ values against the number of nodes
+plt.figure(figsize=(6,4))
+plt.plot()
+plt.xlabel(r'Number of nodes')
+plt.ylabel(r'$\log \mathcal{Z}$')
+# Get data from matching files
+
+
+Num_nodes, logZ = zip(*sorted(zip(Num_nodes, logz_list)))
+Num_nodes = list(Num_nodes)
+logZ = list(logZ)
+
+print(logZ, Num_nodes)
+plt.plot(Num_nodes, logZ, '-.',color='k',alpha=0.9)
+plt.scatter(Num_nodes, logZ, color='k',marker='x',s=20)
+# Annotate each point with its logZ value
+ax = plt.gca()
+y_min = min(logZ) - 5
+y_max = max(logZ) + 5
+ax.set_ylim(y_min, y_max)
+ax.set_xlim(min(Num_nodes) - 0.5, max(Num_nodes) + 0.5)
+y_mid = (ax.get_ylim()[0] + ax.get_ylim()[1]) / 2
+for x, y in zip(Num_nodes, logZ):
+    plt.text(x+0.1, y-2, f'({y:.2f})', fontsize=12, ha='center', va='bottom')
+plt.savefig(f'./linear_logz_{model}.pdf',bbox_inches='tight')
