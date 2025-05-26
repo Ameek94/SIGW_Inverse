@@ -10,8 +10,7 @@ from matplotlib import cm, colors
 from nautilus import Sampler
 import math
 import h5py
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
+from scipy.interpolate import interp1d
 import warnings
 warnings.filterwarnings("ignore")
 from mpi4py.futures import MPIPoolExecutor
@@ -22,7 +21,6 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
 size = comm.Get_size()
-
 
 OMEGA_R = 4.2 * 10**(-5)
 CG = 0.39
@@ -37,7 +35,6 @@ from collections import OrderedDict
 # Global cache for storing kernels keyed by rounded w
 kernel_cache = OrderedDict()
 
-cache_counter = 0
 local_cache_counter = 0
 
 # # open once, reuse for all likelihood calls
@@ -46,14 +43,20 @@ local_cache_counter = 0
 # # kernel datasets stay on disk until you index them
 # dset1 = h5["kernel1"]
 # dset2 = h5["kernel2"]
-# tol = 1e-3
+# tol = 1e-2
 
 # Worker‐local globals
 h5 = None
 w_vals = None
 dset1 = None
 dset2 = None
-tol = 1e-3 #None #
+tol = 1e-2 #None #
+local_cache_counter = 0
+
+def report_hits(_):
+    # each worker (and rank 0 if you include it) will return its counter
+    print(f"[rank {rank}] Reporting local cache hits: {local_cache_counter}")
+    return local_cache_counter
 
 def init_worker():
     global h5, w_vals, dset1, dset2, tol
@@ -67,7 +70,7 @@ def init_worker():
 def get_kernels_from_file(w):
     # find index of the closest precomputed w
     idx = np.abs(w_vals - w).argmin()
-    # print(f"Closest precomputed w: {w_vals[idx]:.6f} (target: {w:.6f})")
+    # print(f"Closest precomputed w: {w_vals[idx]:.6f} (target: {w:.6f}) at rank {rank}")
     if abs(w_vals[idx] - w) > tol:
         raise ValueError(f"No precomputed w within ±{tol}: nearest is {w_vals[idx]:.6f}")
     # pull the two rows
@@ -75,7 +78,7 @@ def get_kernels_from_file(w):
     k2 = dset2[idx, :]
     return k1, k2
 
-def compute_w(w,log10_f_rh,nodes,vals,lengthscale,
+def compute_w(w,log10_f_rh,nodes,vals,
               frequencies,nd=150,fref=1.,kernels_from_file=True):
     global local_cache_counter
     nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
@@ -85,18 +88,20 @@ def compute_w(w,log10_f_rh,nodes,vals,lengthscale,
         try:
             kernel1, kernel2 = get_kernels_from_file(w,)
             local_cache_counter += 1
+            print(f"Using cached kernel for w={w:.6f} (cache hit count: {local_cache_counter}) for rank {rank}")
         except:
             # If the kernel is not found in the file, compute it
+            print(f"Cached kernel not found for w={w:.6f}, computing it for rank {rank}")
             kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
     else:
         kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
 
-    gpkernel = 1 * RBF(length_scale=lengthscale, length_scale_bounds="fixed") #+ np.eye(len(nodes)) * 1e-10
-    gaussian_process = GaussianProcessRegressor(kernel=gpkernel, optimizer=None, normalize_y=True)
-    gaussian_process.fit(nodes.reshape(-1, 1),vals)
+    spl = interp1d(nodes,vals,kind='cubic')
+
+    # print(f"Shapes nodes and vals: {nodes.shape}, {vals.shape}")
 
     interp_nodes = np.linspace(nodes[0], nodes[-1], 200)
-    interp_vals = gaussian_process.predict(interp_nodes.reshape(-1, 1))
+    interp_vals = spl(interp_nodes)
 
     # print(f"Shapes interpolated nodes and vals: {interp_nodes.shape}, {interp_vals.shape}")
 
@@ -112,33 +117,30 @@ def compute_w(w,log10_f_rh,nodes,vals,lengthscale,
     OmegaGW = norm * Integral
     return OmegaGW
 
-def prior(cube, w_min, w_max,l_min, l_max, free_nodes, left_node,right_node, y_min, y_max):
+def prior(cube, w_min, w_max, free_nodes, left_node,right_node, y_min, y_max):
     params = cube.copy()
     w = params[0]
     w = w * (w_max - w_min) + w_min
-    l = params[1]
-    lengthscale = l * (l_max - l_min) + l_min
-    xs = params[2:free_nodes+2]
+    xs = params[1:free_nodes+1]
     N = len(xs)
     t = np.zeros(N)
     t[N-1] = xs[N-1]**(1./N)
     for n in range(N-2, -1, -1):
         t[n] = xs[n]**(1./(n+1)) * t[n+1]
     xs = t*(right_node - left_node) + left_node
-    ys = params[free_nodes+2:]
+    ys = params[free_nodes+1:]
     ys = ys * (y_max - y_min) + y_min
-    return np.concatenate([[w,lengthscale],xs, ys])
+    return np.concatenate([[w],xs, ys])
 
 
 def likelihood(params, log10_f_rh,free_nodes, left_node,right_node, frequencies, Omegas, omgw_sigma):
     # start = time.time()
     w = params[0]
-    lengthscale = params[1]
     # log10_f_rh = params[1]
-    nodes = params[2:free_nodes+2]
+    nodes = params[1:free_nodes+1]
     nodes = np.pad(nodes, (1,1), 'constant', constant_values=(left_node, right_node))
-    vals = params[free_nodes+2:]    
-    omegagw = compute_w(w, log10_f_rh, nodes, vals, lengthscale, frequencies, nd=nd,kernels_from_file=True)
+    vals = params[free_nodes+1:]    
+    omegagw = compute_w(w, log10_f_rh, nodes, vals, frequencies, nd=nd,kernels_from_file=True)
     diff = (omegagw - Omegas)
     ll = -0.5 * np.sum(diff**2 / omgw_sigma**2)
     ll = np.nan_to_num(ll, nan=-1e10, posinf=1e10, neginf=-1e10)
@@ -184,24 +186,22 @@ def main():
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = 0.
-    y_min = -8.
-    l_min = abs(left_node - right_node) / num_nodes / 8  # 5
-    l_max = abs(left_node - right_node)  # 2 * 
+    y_max = -1.
+    y_min = -7.
     w_min = 0.33
     w_max = 0.99
     log10_f_rh = -5.
 
     print(f"prior ranges, w: [{w_min}, {w_max}], \
-          lengthscale: [{l_min:.2f}, {l_max:.2f}] nodes: [{left_node:.2f}, {right_node:.2f}], y: [{y_min}, {y_max}]")
+          nodes: [{left_node:.2f}, {right_node:.2f}], y: [{y_min}, {y_max}]")
 
-    ndim = 2 + free_nodes + num_nodes
+    ndim = 1 + free_nodes + num_nodes
 
     prior_transform = partial(prior,w_min=w_min, w_max=w_max,  
                               free_nodes=free_nodes,
                               left_node=left_node, right_node=right_node,
                               y_min=y_min, y_max=y_max,
-                              l_min = l_min, l_max = l_max)
+                             )
     
     loglikelihood = partial(likelihood,log10_f_rh=log10_f_rh, 
                             free_nodes=free_nodes, left_node=left_node, right_node=right_node,
@@ -209,25 +209,37 @@ def main():
 
     init_worker()
     with MPIPoolExecutor(initializer=init_worker) as pool:
-        sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,resume=True,
+        if rank == 0:
+            sampler = Sampler(prior_transform, loglikelihood, ndim, pass_dict=False,resume=False,
                       n_live = 5000,
-                      filepath=f'{gwb_model}_w0p66_gp_free_{num_nodes}_mpi.h5',pool=MPIPoolExecutor())
-        print(f"[rank {MPI.COMM_WORLD.Get_rank()}] Starting sampler")
-        print(f"Running inference for {num_nodes} nodes")
-        start = time.time()
-        success = sampler.run(verbose=True, f_live=0.002,n_like_max=1000,n_eff=400*ndim)
+                      filepath=f'{gwb_model}_w0p66_cubic_free_{num_nodes}_mpi.h5',pool=pool)
+                    #   MPIPoolExecutor())
+            print(f"[rank {MPI.COMM_WORLD.Get_rank()}] Starting sampler")
+            print(f"Running inference for {num_nodes} nodes")
+            start = time.time()
+            success = sampler.run(verbose=True, f_live=0.002,n_like_max=200,n_eff=400*ndim)
+            print(f"[Rank {rank}] Sampling stopped due to convergence: {success}")
+            print('log Z: {:.4f}'.format(sampler.log_z))
+            print(f"Sampling took {time.time()-start:.2f} seconds")
+            samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
+            print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
+            np.savez(f'{gwb_model}_w0p66_cubic_{num_nodes}_mpi.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
+            print("Nested sampling complete")
+            counts = list(pool.map(report_hits, range(size)))
+            total_cache_hits = sum(counts)
+            print(f"[MPI] Total cache hits across {size} processes: {total_cache_hits}")
+            # total_cache_hits = comm.reduce(local_cache_counter, op=MPI.SUM, root=0)
+            # print(f"[MPI] Total cache hits across {size} processes:", total_cache_hits)
+        else:
+            pool.wait()
 
-    print(f"Running inference for {num_nodes} nodes")
-    start = time.time()
-    success = sampler.run(verbose=True, f_live=0.002,n_like_max=int(5e6),n_eff=400*ndim)
-    print(f"Sampling stopped due to convergence: {success}")
-    print('log Z: {:.4f}'.format(sampler.log_z))
-    print(f"Sampling took {time.time()-start:.2f} seconds")
-    samples, logl, logwt, blobs = sampler.posterior(return_blobs=True)
-    print(f"Max and min loglike: {np.max(logl)}, {np.min(logl)}")
-    np.savez(f'{gwb_model}_w0p66_gp_{num_nodes}_mpi.npz', samples=samples, logl=logl, logwt=logwt,logz=sampler.log_z,omegagw=blobs)
-    print("Nested sampling complete")
-    print(f"Cached kernel was used {cache_counter} times")
+    # # ─── Aggregate cache‐hits across all ranks ─────────────────
+    # total_cache_hits = comm.reduce(local_cache_counter, op=MPI.SUM, root=0)
+    # if rank == 0:
+    #     print(f"[MPI] Total cache hits across {size} processes:", total_cache_hits)
+
+
+    # print(f"Cached kernel was used {cache_counter} times")
 
 if __name__ == "__main__":
     main()

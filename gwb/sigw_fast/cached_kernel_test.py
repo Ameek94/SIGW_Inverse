@@ -7,8 +7,11 @@ import numpy as np
 import h5py
 from sigwfast import sigwfast_mod as gw
 import time 
+import sys
 
 tol = 1e-3
+
+cache_counter = 0
 
 # open once, reuse for all likelihood calls
 h5 = h5py.File("precomputed_kernels.h5", "r")
@@ -38,12 +41,15 @@ rd_norm = CG * OMEGA_R
 nd = 150
 
 def compute_w(w,log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.,compute_kernels=True):
+    global cache_counter
     nd,ns1,ns2, darray,d1array,d2array, s1array,s2array = sd.arrays_w(w,frequencies,nd=nd)
     b = sd.beta(w)
     if compute_kernels:
         kernel1, kernel2 = sd.kernel1_w(d1array, s1array, b), sd.kernel2_w(d2array, s2array, b)
     else:
         kernel1, kernel2 = get_kernels_from_file(w,)
+        cache_counter+= 1
+
 
     nk = len(frequencies)
     Integral = np.empty_like(frequencies)
@@ -77,28 +83,30 @@ frequencies = data['frequencies']
 gwb_model = 'bpl'
 Omegas = data[f'gw_{gwb_model}'] 
 
-niter = 10
+niter = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 
 ws = np.linspace(0.1,0.9,niter-1)
 ws = np.concatenate((ws,[w]))
 
 start = time.time()
-for i in range(niter):
+for i in tqdm(range(niter)):
     gw1 = compute_w(ws[i],log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.,compute_kernels=True)
 print(f"Caclulate kernel: timing for {niter} iterations took {time.time()-start:.4f}s with {-(start-time.time())/niter:.4f}s average ")
 
 start = time.time()
-for i in range(niter):
+for i in tqdm(range(niter)):
     gw2 = compute_w(ws[i],log10_f_rh,nodes,vals,frequencies,use_mp=False,nd=150,fref=1.,compute_kernels=False)
 print(f"Precomputed kernel: timing for {niter} iterations took {time.time()-start:.4f}s with {-(start-time.time())/niter:.4f}s average ")
 
-plt.figure(figsize=(10, 6))
-plt.plot(frequencies, 1.02 * gw1, label='Precomputed Kernels')
-plt.plot(frequencies, 1.05 * gw2, label='Calculated Kernels')
-plt.plot(frequencies, Omegas, label='Original')
-plt.xscale('log')
-plt.yscale('log')
-plt.xlabel('Frequency (Hz)')
-plt.ylabel('Omega GW')
-plt.legend()
-plt.show()
+print(f"Cache hits: {cache_counter}")
+
+# plt.figure(figsize=(10, 6))
+# plt.plot(frequencies, 1.02 * gw1, label='Precomputed Kernels')
+# plt.plot(frequencies, 1.05 * gw2, label='Calculated Kernels')
+# plt.plot(frequencies, Omegas, label='Original')
+# plt.xscale('log')
+# plt.yscale('log')
+# plt.xlabel('Frequency (Hz)')
+# plt.ylabel('Omega GW')
+# plt.legend()
+# # plt.show()

@@ -143,8 +143,8 @@ def main():
     # pk_min, pk_max = np.array(min(frequencies) / fac), np.array(max(frequencies) * fac)
     left_node = np.log10(pk_min)
     right_node = np.log10(pk_max)
-    y_max = -1.
-    y_min = -7.
+    y_max = 0.
+    y_min = -8.
 
     w_min = 0.33
     w_max = 0.99
