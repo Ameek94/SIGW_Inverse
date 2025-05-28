@@ -1,4 +1,4 @@
-# Slightly modified version of the SIGWAY code 
+# Slightly modified version of the SIGWAY code (https://github.com/jonaselgammal/SIGWAY)
 
 import numpy as np
 from scipy.special import sici
