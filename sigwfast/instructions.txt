@@ -32,4 +32,6 @@ Notes
 - The compiled module will be named sigwfast and can be imported in your Python code.
 - If you encounter issues with OpenMP or compiler flags, consult your system documentation or modify the script accordingly.
 
-To install numba-scipy on python>=3.12 see - https://github.com/numba/numba-scipy/issues/101
+To install numba-scipy on python>=3.12 see - https://github.com/numba/numba-scipy/issues/101.
+
+Due to the complicated kernel calculations involved, running SIGWFast with w different from 1/3 is slow. To speed up the inference in this case there is an option to precompute the kernels over a grid of w on [0,1] and use the precomputed kernels in the inference loop. This can be done using the file create_cache_kernels.py with the desired precision settings for the SIGWFast integrator (nd) and w-grid spacing. If you do not wish to use the precomputed kernels, it is highly recommended to use the numba-scipy version of the kernels.  
