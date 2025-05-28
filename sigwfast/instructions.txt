@@ -13,9 +13,9 @@ Prerequisites
 Compilation Steps
 
 1. Navigate to the directory containing the Fortran source files and compile_sigwfast.py:
-   cd gwb/sigw_fast
+   cd sigwfast
 
-2. Edit the script if needed:
+2. Edit the compile script if needed:
    - If you do not have gcc-14, change the CC variable in compile_sigwfast.py to your available GCC version (e.g., gcc or gcc-13).
 
 3. Run the compilation script:
