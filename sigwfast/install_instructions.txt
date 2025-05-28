@@ -1,0 +1,37 @@
+## Compiling the SIGWfast Fortran Extension
+
+This package uses a Fortran extension (`sigwfast`) for fast computation of the induced gravitational wave spectrum.  
+To build this extension, use the provided script:
+
+### Prerequisites
+
+- **Fortran compiler** (e.g., `gfortran`)
+- **GCC** (the script uses `gcc-14` by default; adjust if needed)
+- **NumPy** (for `f2py`)
+- **OpenMP** support (for parallelization)
+
+### Compilation Steps
+
+1. **Navigate to the directory** containing the Fortran source files and `compile_sigwfast.py`:
+    ```bash
+    cd gwb/sigw_fast
+    ```
+
+2. **Edit the script if needed**:
+    - If you do not have `gcc-14`, change the `CC` variable in `compile_sigwfast.py` to your available GCC version (e.g., `gcc` or `gcc-13`).
+
+3. **Run the compilation script**:
+    ```bash
+    python compile_sigwfast.py
+    ```
+
+4. **Check for success**:
+    - If compilation is successful, you will see:  
+      `Compilation successful! You can now import sigwfast in Python.`
+    - If not, review the error messages and ensure all dependencies are installed.
+
+### Notes
+
+- The script uses `f2py` to build the Python extension from the Fortran sources.
+- The compiled module will be named `sigwfast` and can be imported in your Python code.
+- If you encounter issues with OpenMP or compiler flags, consult your system documentation or modify the script accordingly.
