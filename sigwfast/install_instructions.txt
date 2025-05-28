@@ -1,6 +1,9 @@
 ## Compiling the SIGWfast Fortran Extension
+## The SIGWFast code is originally written by [Lukas T. Witkowski].
+# MIT License
+# Copyright (c) 2022 Lukas T. Witkowski
+# Modifications have been made by Ameek Malhotra. These include moving most of the SIGWFast routines apart from the kernel calculations to fortran and optionally using numba-scipy to accelerate the kernel calculations.
 
-This package uses a Fortran extension (`sigwfast`) for fast computation of the induced gravitational wave spectrum.  
 To build this extension, use the provided script:
 
 ### Prerequisites
