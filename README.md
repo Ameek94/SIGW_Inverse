@@ -14,7 +14,7 @@ To use this code, you will need the following Python (version>=3.12) packages:
 - getdist
 - nautilus-sampler
 - h5py
-- tqdm
+- tqdm (optional, can be commented out)
 - mpi4py (for MPI parallelism, optional)
 
 
