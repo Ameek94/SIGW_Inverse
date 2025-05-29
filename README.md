@@ -4,7 +4,7 @@ Code to reconstruct the primordial curvature power spectrum from the scalar indu
 
 ## Requirements
 
-To use this code, you will need the following Python (code is developed and tested with python>=3.12) packages:
+To use this code, you will need the following Python packages (code is developed and tested with python>=3.12):
 
 - numpy
 - scipy
