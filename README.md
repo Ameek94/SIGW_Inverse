@@ -20,11 +20,18 @@ To use this code, you will need the following Python (code is developed and test
 
 If you use this code in your works please cite our paper
 ```
-@article{,
+@article{Ghaleb:2025xqn,
+    author = "Ghaleb, Aya and Malhotra, Ameek and Tasinato, Gianmassimo and Zavala, Ivonne",
+    title = "{Bayesian reconstruction of primordial perturbations from induced gravitational waves}",
+    eprint = "2505.22534",
+    archivePrefix = "arXiv",
+    primaryClass = "astro-ph.CO",
+    month = "5",
+    year = "2025"
 }
 ```
 
 
 Please also cite [SIGWAY](https://github.com/jonaselgammal/SIGWAY) and [SIGWFast](https://github.com/Lukas-T-W/SIGWfast) depending on which method you use to calculate the scalar induced gravitational wave background. If you use any of the nested sampling routines, consider also citing them.
 
-If you would like to use SIGWFast for reconstruction in the general equation of state case, please go through the instructions in the sigwfast folder.
+If you would like to use SIGWFast for reconstruction in the general equation of state case, please go through the instructions in the sigwfast folder (currently being updated).
