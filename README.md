@@ -34,4 +34,4 @@ If you use this code in your works please cite our paper
 
 Please also cite [SIGWAY](https://github.com/jonaselgammal/SIGWAY) and [SIGWFast](https://github.com/Lukas-T-W/SIGWfast) depending on which method you use to calculate the scalar induced gravitational wave background. If you use any of the nested sampling routines, consider also citing them.
 
-If you would like to use SIGWFast for reconstruction in the general equation of state case, please go through the instructions in the sigwfast folder (currently being updated).
+If you would like to use SIGWFast for reconstruction in the general equation of state case, please go through the instructions in the sigwfast folder.
