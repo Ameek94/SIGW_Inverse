@@ -1,6 +1,6 @@
 # SIGW_Inverse
  
-Code to reconstruct the primordial curvature power spectrum from the scalar induced GW spectrum based on the method outlined in [arxiv:2505.22534](https://arxiv.org/abs/2505.22534). See the jax and sigwfast folders for examples on how to use the code. 
+Code to reconstruct the primordial curvature power spectrum from the scalar induced GW spectrum (SIGW) based on the method outlined in [arxiv:2505.22534](https://arxiv.org/abs/2505.22534). See the jax and sigwfast folders for examples on how to use the code. The jax code uses [SIGWAY](https://github.com/jonaselgammal/SIGWAY) to calculate the SIGW spectrum from an input curvature power spectrum assuming either radiation domination or an early-matter to radiation transition. For general equation of state, we use [SIGWFast](https://github.com/Lukas-T-W/SIGWfast).
 
 ## Requirements
 
