@@ -174,7 +174,7 @@ def get_pz_omega(nodes, vals,lengthscales):
     return (pz_amps, gwb_res)
 
 pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys, lengthscales), batch_size=64)
-
+print(f"Nans in gwb_amps: {np.any(np.isnan(gwb_amps))}")
 
 fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
                                     k_arr=[p_arr_local, frequencies],
@@ -190,6 +190,7 @@ else:
 ax[1].errorbar(frequencies, Omegas_mean, yerr=np.sqrt(np.diag(cov)), fmt='o', color='k', capsize=4.,alpha=0.5,markersize=2)
 ax[1].legend()
 ax[0].set_ylim(10**y_min, 10**y_max)
+ax[1].set_ylim(1e-14,1e-8)  
 k_mpc_f_hz = 2*np.pi * 1.03 * 10**14
 for x in ax:
     x.set(xscale='log', yscale='log', xlabel=r'$f\,{\rm [Hz]}$')
