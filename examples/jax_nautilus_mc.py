@@ -189,13 +189,24 @@ def main():
     global gwb_calculator, frequencies, Omegas, cov, p_arr, pz_amp
 
     model = str(sys.argv[1])
+    num_nodes = int(sys.argv[2])
+    realization_index = 100 * int(sys.argv[3]) if len(sys.argv) > 3 else None
+
     # Load the gravitational wave background data.
     data = np.load(f'./{model}_data.npz')
     frequencies = data['k']
-    Omegas = data['gw']
+    Omegas_mean = data['gw']
     cov = data['cov']
     p_arr = data['p_arr']
     pz_amp = data['pz_amp']
+
+    if realization_index is not None:
+        print(f"Generating realization {realization_index} of Omegas.")
+        rstate = np.random.default_rng(realization_index)
+        Omegas = rstate.multivariate_normal(Omegas_mean, cov)
+    else:
+        print("Using mean Omegas.")
+        Omegas = Omegas_mean
 
     # Set up internal momenta for the OmegaGWjax calculator.
     s = jnp.linspace(0, 1, 15)  # rescaled internal momentum
@@ -207,7 +218,6 @@ def main():
     gwb_calculator = OmegaGWjax(s=s, t=t, f=frequencies, norm="RD", jit=True)
 
     # Parse the number of nodes from command line arguments.
-    num_nodes = int(sys.argv[2])
     print(f"Running inference with number of nodes: {num_nodes}, free nodes: {num_nodes - 2}")
     free_nodes = num_nodes - 2
 
@@ -222,58 +232,38 @@ def main():
     y_mins = np.array(num_nodes * [y_min])
     y_maxs = np.array(num_nodes * [y_max])
 
+    n_live = 3000
+
     # Set up the sampler.
     ndim = free_nodes + num_nodes
-    sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True
-                                            ,pool=(None,4),filepath=f'./nautilus_{model}_{num_nodes}_linear_nodes.h5') 
+    if realization_index is not None:
+        filepath = f'./nautilus_{model}_{num_nodes}_linear_nodes_realization_{realization_index}.h5'
+    else:
+        filepath = f'./nautilus_{model}_{num_nodes}_linear_nodes.h5'
+    sampler = Sampler(prior, likelihood, ndim, pass_dict=False, vectorized=True,n_live=n_live
+                                            ,pool=None,filepath=filepath) 
 
     start = time.time()
-    sampler.run(verbose=True, f_live=0.005, n_like_max=3e6)#, n_eff=2000*ndim)
+    sampler.run(verbose=True, f_live=0.001, n_like_max=3e6)#, n_eff=2000*ndim)
     end = time.time()
     print('Time taken: {:.2f} s'.format(end - start))
     print('log Z: {:.2f}'.format(sampler.log_z))
 
     # Retrieve posterior samples.
     samples, logl, logwt = sampler.posterior()
-    np.savez(f'nautilus_{model}_{num_nodes}_linear_nodes.npz', samples=samples, logl=logl, logwt=logwt, logz=sampler.log_z)
+    
+    save_data = {'samples': samples, 'logl': logl, 'logwt': logwt, 'logz': sampler.log_z}
+    
+    if realization_index is not None:
+        npz_filepath = f'nautilus_{model}_{num_nodes}_linear_nodes_realization_{realization_index}.npz'
+        save_data['omegas'] = Omegas
+    else:
+        npz_filepath = f'nautilus_{model}_{num_nodes}_linear_nodes.npz'
+        
+    np.savez(npz_filepath, **save_data)
     print(samples.shape)
     print(logl.shape)
     print(logwt.shape)
-
-    # # Resample to obtain equally weighted samples.
-    # rstate = np.random.default_rng(100000)
-    # samples, lp = resample_equal(samples, logl, logwt, rstate=rstate)
-    # print("Obtained equally weighted samples")
-    # print(f"Max and min logprob: {np.max(lp)}, {np.min(lp)}")
-    # print(len(lp))
-
-    # # Postprocessing: Compute functional posteriors.
-    # p_arr_local = jnp.logspace(left_node + 0.001, right_node - 0.001, 150)
-    # thinning = samples.shape[0] // 512
-    # xs = samples[:, :free_nodes][::thinning]
-    # ys = samples[:, free_nodes:][::thinning]
-    # xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
-    # ys = jnp.array(ys)
-    # pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
-
-    # print(pz_amps.shape)
-    # print(gwb_amps.shape)
-
-    # fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
-    #                                     k_arr=[p_arr_local, frequencies],
-    #                                     aspect_ratio=(6, 4))
-    # ax[0].loglog(p_arr_local, pz_amp, color='k', lw=1.5)
-    # ax[1].loglog(frequencies, Omegas, color='k', lw=1.5, label='Truth')
-
-    # # Add secondary x-axis (e.g. converting f [Hz] to k [Mpc^{-1}]).
-    # k_mpc_f_hz = 2 * np.pi * 1.03 * 10**14
-    # for x in ax:
-    #     secax = x.secondary_xaxis('top', functions=(lambda x: x * k_mpc_f_hz,
-    #                                                    lambda x: x / k_mpc_f_hz))
-    #     secax.set_xlabel(r"$k\,{\rm [Mpc^{-1}]}$", labelpad=10)
-
-    # plt.savefig(f'{model}_{num_nodes}.pdf', bbox_inches='tight')
-    # plt.show()
 
     # # Resample to obtain equally weighted samples.
     # rstate = np.random.default_rng(100000)
