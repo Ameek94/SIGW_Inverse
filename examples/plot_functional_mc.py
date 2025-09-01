@@ -117,6 +117,7 @@ samples_data = np.load(filepath)
 samples = samples_data['samples']
 logl = samples_data['logl']
 logz = samples_data['logz']
+logwt = samples_data['logwt']
 if 'omegas' in samples_data:
     Omegas = samples_data['omegas']
 else:
@@ -132,17 +133,41 @@ def interpolate(nodes, vals, x):
     res = jnp.where(x > right_node, 0, res)
     return res
 
+def resample_equal(samples, logl, logwt, rstate):
+    # Resample samples to obtain equal weights.
+    wt = np.exp(logwt)
+    weights = wt / wt.sum()
+    cumulative_sum = np.cumsum(weights)
+    cumulative_sum /= cumulative_sum[-1]
+    nsamples = len(weights)
+    positions = (rstate.random() + np.arange(nsamples)) / nsamples
+    idx = np.zeros(nsamples, dtype=int)
+    i, j = 0, 0
+    while i < nsamples:
+        if positions[i] < cumulative_sum[j]:
+            idx[i] = j
+            i += 1
+        else:
+            j += 1
+    perm = rstate.permutation(nsamples)
+    resampled_samples = samples[idx][perm]
+    resampled_logl = logl[idx][perm]
+    return resampled_samples, resampled_logl
+
+equal_samples, equal_logl = resample_equal(samples, logl, logwt, np.random.RandomState())
+
 # thinning the samples
 thinning = max(1,len(samples)//num_samples)
-xs = samples[:, :free_nodes][::thinning]
-ys = samples[:, free_nodes:][::thinning]
+xs = equal_samples[:, :free_nodes][::thinning]
+ys = equal_samples[:, free_nodes:][::thinning]
 xs = jnp.pad(xs, ((0, 0), (1, 1)), 'constant', constant_values=((0, 0), (left_node, right_node)))
 ys = jnp.array(ys)
-logwt = samples_data['logwt'][::thinning]
-print(xs.shape, ys.shape, logwt.shape)
-logwt_total = logsumexp(logwt)
-thinned_weights = np.exp(logwt - logwt_total)
-thinned_weights = thinned_weights / thinned_weights.sum()
+# logwt = samples_data['logwt'][::thinning]
+weights = np.ones(len(equal_logl)) 
+print(xs.shape, ys.shape, weights.shape)
+# logwt_total = logsumexp(logwt)
+# thinned_weights = np.exp(logwt - logwt_total)
+# thinned_weights = thinned_weights / thinned_weights.sum()
 
 p_arr_local = jnp.logspace(left_node+0.001, right_node-0.001, 200)
 
@@ -159,7 +184,7 @@ pz_amps, gwb_amps = split_vmap(get_pz_omega, (xs, ys), batch_size=32)
 fig, ax = plot_functional_posterior([pz_amps, gwb_amps],
                                     k_arr=[p_arr_local, frequencies],
                                     intervals=[68., 95.],
-                                    weights = thinned_weights,
+                                    weights = weights,
                                     aspect_ratio=(6,4.5))
 ax[0].loglog(p_arr, pz_amp, color='k', lw=1.5)
 if realization_index is not None:
